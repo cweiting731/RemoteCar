@@ -1,0 +1,32 @@
+# ============ Unity ============
+
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]serSettings/
+[Mm]emoryCaptures/
+[Pp]rofiles/
+[Rr]ecords/
+[Pp]ackages/com.unity.render-pipelines.*
+
+# ============ IDE / OS 相關 ============
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.user
+*.pidb
+*.booproj
+*.suo
+*.tmp
+*.bak
+*.old
+.DS_Store
+Thumbs.db
+
+# ============ 測試 / 暫存 ============
+[Pp]lugins/Editor/JetBrains*
