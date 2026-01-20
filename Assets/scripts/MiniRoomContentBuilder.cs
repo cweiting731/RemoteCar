@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class MiniRoomContentBuilder : MonoBehaviour
 {
@@ -21,10 +23,20 @@ public class MiniRoomContentBuilder : MonoBehaviour
     public bool useOverrideMaterial = false;
     public Material overrideMaterial;
 
+    [Header("Label White List")]
+    public RoomLabelMask labelWhiteList = RoomLabelMask.NONE;
+
+    [Header("Label Setting")]
+    public GameObject labelPrefab;
+    public Vector3 labelOffset = new Vector3(0f, 2f, 0f);
+
     private Transform _roomRoot;
     private Transform _contentRoot;
+    private Transform _labelRoot;
+
     private bool _placed = false;
     private readonly List<Renderer> _renderers = new();
+    private readonly List<GameObject> _spawnedLabels = new();
 
     private IEnumerator Start()
     {
@@ -50,7 +62,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         }
     }
 
-    // ===== Public API（你之後可手動呼叫重建）=====
+    // ================= Public API =================
     public void BuildOrRebuild()
     {
         PrepareRootPlacement();
@@ -58,7 +70,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         UpdateRootBoxCollider();
     }
 
-    // ===== Root placement（只做一次）=====
+    // ================= Root placement =================
     private void PrepareRootPlacement()
     {
         if (!placeOnceInFront || _placed) return;
@@ -86,7 +98,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         return Quaternion.LookRotation(fwd, Vector3.up);
     }
 
-    // ===== Content rebuild =====
+    // ================= Content rebuild =================
     private void RebuildContent()
     {
         if (_contentRoot != null)
@@ -122,8 +134,11 @@ public class MiniRoomContentBuilder : MonoBehaviour
             var srcMr = mf.GetComponent<MeshRenderer>();
             if (srcMr == null) continue;
 
-            var go = new GameObject($"Mini_{mf.name}");
-            go.transform.SetParent(_contentRoot, false);
+            var parent = new GameObject($"Mini_{mf.name}");
+            parent.transform.SetParent(_contentRoot, false);
+
+            var go = new GameObject("mesh");
+            go.transform.SetParent(parent.transform, false);
 
             Vector3 localPos = _roomRoot.InverseTransformPoint(mf.transform.position);
             Quaternion localRot = Quaternion.Inverse(_roomRoot.rotation) * mf.transform.rotation;
@@ -143,10 +158,99 @@ public class MiniRoomContentBuilder : MonoBehaviour
                 mr.sharedMaterial = overrideMaterial;
 
             _renderers.Add(mr);
+
+            // ===== Label =====
+            if (labelPrefab != null)
+            {
+                if (TryGetMaskFromName(mf.name, out RoomLabelMask mask))
+                {
+                    if (labelWhiteList == RoomLabelMask.NONE || (labelWhiteList & mask) != 0)
+                    {
+                        CreateLabelForRenderer(mr, mask.ToString(), parent.transform);
+                    }
+                }
+            }
         }
     }
 
-    // ===== Collider update =====
+    // ================= Label rebuild =================
+    private bool TryGetMaskFromName(string objectName, out RoomLabelMask mask)
+    {
+        string n = objectName.ToUpperInvariant();
+
+        if (n.Contains("FLOOR"))        { mask = RoomLabelMask.FLOOR; return true; }
+        if (n.Contains("CEILING"))      { mask = RoomLabelMask.CEILING; return true; }
+        if (n.Contains("WALL_ART"))     { mask = RoomLabelMask.WALL_ART; return true; }
+        if (n.Contains("WALL"))         { mask = RoomLabelMask.WALL_FACE; return true; }
+        if (n.Contains("TABLE"))        { mask = RoomLabelMask.TABLE; return true; }
+        if (n.Contains("COUCH") || n.Contains("SOFA"))
+                                        { mask = RoomLabelMask.COUCH; return true; }
+        if (n.Contains("BED"))          { mask = RoomLabelMask.BED; return true; }
+        if (n.Contains("SCREEN") || n.Contains("TV"))
+                                        { mask = RoomLabelMask.SCREEN; return true; }
+        if (n.Contains("LAMP") || n.Contains("LIGHT"))
+                                        { mask = RoomLabelMask.LAMP; return true; }
+        if (n.Contains("PLANT"))        { mask = RoomLabelMask.PLANT; return true; }
+        if (n.Contains("STORAGE") || n.Contains("CABINET") || n.Contains("SHELF"))
+                                        { mask = RoomLabelMask.STORAGE; return true; }
+        if (n.Contains("DOOR"))         { mask = RoomLabelMask.DOOR_FRAME; return true; }
+        if (n.Contains("WINDOW"))       { mask = RoomLabelMask.WINDOW_FRAME; return true; }
+
+        mask = RoomLabelMask.OTHER;
+        return true;
+    }
+
+
+    private void CreateLabelForRenderer(Renderer r, string text, Transform parent = null)
+    {
+        Bounds b = r.bounds;
+
+        Vector3 worldPos =
+            b.center +
+            Vector3.up * (b.extents.y + labelOffset.y) * scaleFactor;
+
+        var go = Instantiate(labelPrefab, _labelRoot);
+        go.name = $"Label_{text}";
+        go.transform.position = worldPos;
+
+        var uiText = go.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (uiText != null)
+            uiText.text = text;
+
+        if (parent != null)
+            go.transform.SetParent(parent, true);
+
+        go.transform.localScale *= scaleFactor * 2;
+
+        _spawnedLabels.Add(go);
+    }
+
+    private void ClearLabels()
+    {
+        foreach (var l in _spawnedLabels)
+            if (l) Destroy(l);
+
+        _spawnedLabels.Clear();
+    }
+
+    private bool TryMapLabel(string semantic, out RoomLabelMask mask)
+    {
+        switch (semantic)
+        {
+            case "TABLE": mask = RoomLabelMask.TABLE; return true;
+            case "COUCH": mask = RoomLabelMask.COUCH; return true;
+            case "BED": mask = RoomLabelMask.BED; return true;
+            case "SCREEN": mask = RoomLabelMask.SCREEN; return true;
+            case "LAMP": mask = RoomLabelMask.LAMP; return true;
+            case "PLANT": mask = RoomLabelMask.PLANT; return true;
+            case "STORAGE": mask = RoomLabelMask.STORAGE; return true;
+            default:
+                mask = RoomLabelMask.OTHER;
+                return false;
+        }
+    }
+
+    // ================= Collider =================
     private void UpdateRootBoxCollider()
     {
         var col = GetComponent<BoxCollider>();
