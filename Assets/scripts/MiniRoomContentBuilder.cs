@@ -30,6 +30,9 @@ public class MiniRoomContentBuilder : MonoBehaviour
     public GameObject labelPrefab;
     public Vector3 labelOffset = new Vector3(0f, 2f, 0f);
 
+    [Header("Player Marker")]
+    [SerializeField] private GameObject playerMarkerPrefab;
+
     private Transform _roomRoot;
     private Transform _contentRoot;
     private Transform _labelRoot;
@@ -164,13 +167,14 @@ public class MiniRoomContentBuilder : MonoBehaviour
             {
                 if (TryGetMaskFromName(mf.name, out RoomLabelMask mask))
                 {
-                    if (labelWhiteList == RoomLabelMask.NONE || (labelWhiteList & mask) != 0)
+                    if (!(labelWhiteList == RoomLabelMask.NONE || (labelWhiteList & mask) == 0))
                     {
                         CreateLabelForRenderer(mr, mask.ToString(), parent.transform);
                     }
                 }
             }
         }
+        SpawnPlayerMarker(roomCenterLocal);
     }
 
     // ================= Label rebuild =================
@@ -271,4 +275,38 @@ public class MiniRoomContentBuilder : MonoBehaviour
         size.z /= transform.lossyScale.z;
         col.size = size;
     }
+
+    private void SpawnPlayerMarker(Vector3 roomCenterLocal)
+    {
+        if (playerMarkerPrefab == null || head == null)
+            return;
+
+        GameObject markerGO =
+            Instantiate(playerMarkerPrefab);
+
+        markerGO.name = "PlayerMarker";
+
+        // Keep the marker under this builder so it follows the mini room root
+        markerGO.transform.SetParent(transform, false);
+
+        // 抵銷 MiniRoom scale
+        markerGO.transform.localScale = Vector3.one / scaleFactor;
+
+        var controller =
+            markerGO.GetComponent<PlayerMarkerController>();
+
+        if (controller == null)
+        {
+            Debug.LogError("PlayerMarkerPrefab missing PlayerMarkerController");
+            return;
+        }
+
+        controller.Initialize(
+            head,
+            _roomRoot,
+            roomCenterLocal,
+            scaleFactor
+        );
+    }
+
 }

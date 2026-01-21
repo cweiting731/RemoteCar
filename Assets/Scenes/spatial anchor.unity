@@ -3923,9 +3923,10 @@ MonoBehaviour:
   faceUserYawOnly: 1
   useOverrideMaterial: 1
   overrideMaterial: {fileID: 2100000, guid: 599b01c5f1d17436c89b88cc04257314, type: 2}
-  labelWhiteList: 16250
+  labelWhiteList: 0
   labelPrefab: {fileID: 4006921124630340259, guid: 08114f2a829b872489b91907a542e96b, type: 3}
   labelOffset: {x: 0, y: 0.5, z: 0}
+  playerMarkerPrefab: {fileID: 1079258883011792375, guid: 76af2070e2d9b7740888c3546d085c08, type: 3}
 --- !u!65 &615887496
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -4584,7 +4585,7 @@ Transform:
   m_GameObject: {fileID: 699728423}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.831, z: 0.404}
+  m_LocalPosition: {x: 0, y: 0.423, z: 0.618}
   m_LocalScale: {x: 0.1, y: 0.1, z: 0.1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -9251,7 +9252,7 @@ Transform:
   m_GameObject: {fileID: 1610797693}
   serializedVersion: 2
   m_LocalRotation: {x: -0.3128998, y: 0.23592418, z: 0.025638394, w: 0.9196609}
-  m_LocalPosition: {x: -0.126, y: 0.687, z: 0.402}
+  m_LocalPosition: {x: 0.069, y: 0.655, z: 0.795}
   m_LocalScale: {x: 0.1, y: 0.1, z: 0.1}
   m_ConstrainProportionsScale: 1
   m_Children:
