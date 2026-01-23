@@ -283,7 +283,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e76943ac7e7394f3e969f0c048b26639, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  SpawnOnStart: 1
+  SpawnOnStart: 2
   MeshMaterial: {fileID: 2100000, guid: ae8cf8de2cfd47f4ab3d1ac2324c9846, type: 2}
   Colliders: 1
   CutHoles: 0
@@ -3923,10 +3923,9 @@ MonoBehaviour:
   faceUserYawOnly: 1
   useOverrideMaterial: 1
   overrideMaterial: {fileID: 2100000, guid: 599b01c5f1d17436c89b88cc04257314, type: 2}
-  labelWhiteList: 0
   labelPrefab: {fileID: 4006921124630340259, guid: 08114f2a829b872489b91907a542e96b, type: 3}
   labelOffset: {x: 0, y: 0.5, z: 0}
-  playerMarkerPrefab: {fileID: 1079258883011792375, guid: 76af2070e2d9b7740888c3546d085c08, type: 3}
+  playerMarkerPrefab: {fileID: 7978300592493306209, guid: 76af2070e2d9b7740888c3546d085c08, type: 3}
 --- !u!65 &615887496
 BoxCollider:
   m_ObjectHideFlags: 0

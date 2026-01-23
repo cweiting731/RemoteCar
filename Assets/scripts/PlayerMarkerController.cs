@@ -12,6 +12,9 @@ public class PlayerMarkerController : MonoBehaviour
     [Header("Mini Room")]
     public float scaleFactor = 0.01f;
 
+    [Header("Material")]
+    public Material markerMaterial;
+
     private bool _initialized;
     private Vector3 _originalLocalScale;
 
@@ -33,6 +36,12 @@ public class PlayerMarkerController : MonoBehaviour
         roomRoot = roomRootTransform;
         roomCenterLocal = roomCenter;
         scaleFactor = miniScale;
+
+        Renderer renderer = GetComponent<Renderer>();
+        if (renderer != null && markerMaterial != null)
+        {
+            renderer.material = markerMaterial;
+        }
 
         // Resize marker according to mini room scale
         transform.localScale = _originalLocalScale * scaleFactor;
