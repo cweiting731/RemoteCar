@@ -29,6 +29,12 @@ public class MiniRoomContentBuilder : MonoBehaviour
     [Header("Player Marker")]
     [SerializeField] private GameObject playerMarkerPrefab;
 
+    [Header("Car Marker")]
+    public GameObject carMarkerPrefab;
+
+    private MarkerController _carMarker;
+    private Vector3 _roomCenterLocal;
+
     private readonly List<Transform> _roomRoots = new();
     private Transform _contentRoot;
     private bool _placed;
@@ -113,6 +119,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
             combinedBounds.Encapsulate(allRenderers[i].bounds);
 
         Vector3 combinedCenterWorld = combinedBounds.center;
+        _roomCenterLocal = combinedCenterWorld;
 
         // 使用第一個 room 當 reference（因為都在 0,0,0）
         Transform refRoom = _roomRoots[0];
@@ -184,7 +191,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         GameObject marker = Instantiate(playerMarkerPrefab, transform, false);
         marker.transform.localScale = Vector3.one / scaleFactor;
 
-        var ctrl = marker.GetComponent<PlayerMarkerController>();
+        var ctrl = marker.GetComponent<MarkerController>();
         if (!ctrl) return;
 
         ctrl.Initialize(
@@ -194,4 +201,37 @@ public class MiniRoomContentBuilder : MonoBehaviour
             scaleFactor
         );
     }
+
+    public void RegisterCar(Transform carTransform)
+    {
+        ClearCar();
+
+        if (!carMarkerPrefab) return;
+
+        GameObject marker =
+            Instantiate(carMarkerPrefab, transform, false);
+
+        // 抵銷 mini scale（跟 PlayerMarker 一樣）
+        marker.transform.localScale = Vector3.one / scaleFactor;
+
+        _carMarker = marker.GetComponent<MarkerController>();
+        if (!_carMarker) return;
+
+        _carMarker.Initialize(
+            carTransform,
+            _roomRoots[0],          // Room - xxxx
+            _roomCenterLocal,
+            scaleFactor
+        );
+    }
+
+    public void ClearCar()
+    {
+        if (_carMarker != null)
+        {
+            Destroy(_carMarker.gameObject);
+            _carMarker = null;
+        }
+    }
+
 }

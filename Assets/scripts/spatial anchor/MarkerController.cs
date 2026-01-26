@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class PlayerMarkerController : MonoBehaviour
+public class MarkerController : MonoBehaviour
 {
     [Header("Tracking Target")]
     public Transform target;            // Head / Hand
