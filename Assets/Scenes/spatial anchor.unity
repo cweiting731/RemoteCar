@@ -3925,8 +3925,8 @@ MonoBehaviour:
   overrideMaterial: {fileID: 2100000, guid: 599b01c5f1d17436c89b88cc04257314, type: 2}
   labelPrefab: {fileID: 4006921124630340259, guid: 08114f2a829b872489b91907a542e96b, type: 3}
   labelOffset: {x: 0, y: 0.5, z: 0}
-  playerMarkerPrefab: {fileID: 7978300592493306209, guid: 76af2070e2d9b7740888c3546d085c08, type: 3}
-  carMarkerPrefab: {fileID: 7163304945635861907, guid: 70a3f8effc4300446830c9deb90c1bce, type: 3}
+  playerMarkerPrefab: {fileID: 7463322409254410933, guid: 76af2070e2d9b7740888c3546d085c08, type: 3}
+  carMarkerPrefab: {fileID: 8505489918129294763, guid: 70a3f8effc4300446830c9deb90c1bce, type: 3}
 --- !u!65 &615887496
 BoxCollider:
   m_ObjectHideFlags: 0
