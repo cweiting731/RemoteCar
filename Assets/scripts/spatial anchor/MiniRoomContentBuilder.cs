@@ -25,6 +25,10 @@ public class MiniRoomContentBuilder : MonoBehaviour
     [Header("Label")]
     public GameObject labelPrefab;
     public Vector3 labelOffset = new Vector3(0f, 2f, 0f);
+    public RoomLabelMask labelWhiteList = RoomLabelMask.NONE;
+
+    private Transform _labelRoot;
+    private readonly List<GameObject> _spawnedLabels = new();
 
     [Header("Player Marker")]
     [SerializeField] private GameObject playerMarkerPrefab;
@@ -139,8 +143,11 @@ public class MiniRoomContentBuilder : MonoBehaviour
                 var srcMr = mf.GetComponent<MeshRenderer>();
                 if (srcMr == null) continue;
 
-                GameObject go = new GameObject($"Mini_{mf.name}");
-                go.transform.SetParent(_contentRoot, false);
+                GameObject goParent = new GameObject($"Mini_{mf.name.Replace("_EffectMesh", "")}");
+                goParent.transform.SetParent(_contentRoot, false);
+
+                GameObject go = new GameObject($"mesh");
+                go.transform.SetParent(goParent.transform, false);
 
                 Vector3 localPos =
                     refRoom.InverseTransformPoint(mf.transform.position);
@@ -162,6 +169,18 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
                 if (useOverrideMaterial && overrideMaterial != null)
                     mr.sharedMaterial = overrideMaterial;
+                
+                // ===== Label =====
+                if (labelPrefab != null)
+                {
+                    if (TryGetMaskFromName(mf.name, out RoomLabelMask mask))
+                    {
+                        if (!(labelWhiteList == RoomLabelMask.NONE || (labelWhiteList & mask) == 0))
+                        {
+                            CreateLabelForRenderer(mr, mask.ToString(), goParent.transform);
+                        }
+                    }
+                }
             }
         }
 
@@ -232,6 +251,55 @@ public class MiniRoomContentBuilder : MonoBehaviour
             Destroy(_carMarker.gameObject);
             _carMarker = null;
         }
+    }
+
+    // ================= Label rebuild =================
+    private bool TryGetMaskFromName(string objectName, out RoomLabelMask mask)
+    {
+        string n = objectName.ToUpperInvariant();
+
+        if (n.Contains("FLOOR"))        { mask = RoomLabelMask.FLOOR; return true; }
+        if (n.Contains("CEILING"))      { mask = RoomLabelMask.CEILING; return true; }
+        if (n.Contains("WALL_ART"))     { mask = RoomLabelMask.WALL_ART; return true; }
+        if (n.Contains("WALL"))         { mask = RoomLabelMask.WALL_FACE; return true; }
+        if (n.Contains("TABLE"))        { mask = RoomLabelMask.TABLE; return true; }
+        if (n.Contains("COUCH") || n.Contains("SOFA"))
+                                        { mask = RoomLabelMask.COUCH; return true; }
+        if (n.Contains("BED"))          { mask = RoomLabelMask.BED; return true; }
+        if (n.Contains("SCREEN") || n.Contains("TV"))
+                                        { mask = RoomLabelMask.SCREEN; return true; }
+        if (n.Contains("LAMP") || n.Contains("LIGHT"))
+                                        { mask = RoomLabelMask.LAMP; return true; }
+        if (n.Contains("PLANT"))        { mask = RoomLabelMask.PLANT; return true; }
+        if (n.Contains("STORAGE") || n.Contains("CABINET") || n.Contains("SHELF"))
+                                        { mask = RoomLabelMask.STORAGE; return true; }
+        if (n.Contains("DOOR"))         { mask = RoomLabelMask.DOOR_FRAME; return true; }
+        if (n.Contains("WINDOW"))       { mask = RoomLabelMask.WINDOW_FRAME; return true; }
+
+        mask = RoomLabelMask.OTHER;
+        return true;
+    }
+
+    private void CreateLabelForRenderer(Renderer r, string text, Transform parent)
+    {
+        Bounds b = r.bounds;
+
+        Vector3 worldPos =
+            b.center +
+            Vector3.up * (b.extents.y + labelOffset.y) * scaleFactor;
+
+        GameObject go = Instantiate(labelPrefab, parent);
+        go.name = $"Label_{text}";
+        go.transform.position = worldPos;
+
+        var uiText = go.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+        if (uiText != null)
+            uiText.text = text;
+
+        // 抵銷 MiniRoom scale
+        // go.transform.localScale *= scaleFactor * 2f;
+
+        _spawnedLabels.Add(go);
     }
 
 }
