@@ -1,4 +1,5 @@
 using UnityEngine;
+using Oculus.Interaction;
 
 public class PrefabSpawner : MonoBehaviour
 {
@@ -11,35 +12,64 @@ public class PrefabSpawner : MonoBehaviour
     [Header("MiniRoomContentBuilder Reference")]
     public MiniRoomContentBuilder miniRoomContentBuilder;
 
+    [Header("Button Wrapper (When Selected)")]
+    public InteractableUnityEventWrapper buttonWrapper;
+
     private GameObject currentInstance;
+    private VehicleLikeMovement movementScript;
 
     // 👇 這個會給 When Selected 呼叫
     public void TogglePrefab()
     {
         if (currentInstance == null)
         {
-            currentInstance = Instantiate(
-                prefab,
-                spawnPoint.position,
-                spawnPoint.rotation
-            );
-
-            if (miniRoomContentBuilder != null)
-            {
-                miniRoomContentBuilder.RegisterCar(currentInstance.transform);
-            }
-            Debug.Log("[PrefabSpawner] Prefab spawned at: " + spawnPoint.position);
+            SpawnAndBind();
         }
         else
         {
-            if (miniRoomContentBuilder != null)
-                miniRoomContentBuilder.ClearCar();
-
-            Destroy(currentInstance);
-            currentInstance = null;
-            Debug.Log("[PrefabSpawner] Prefab destroyed.");
+            UnbindAndDestroy();
         }
     }
+
+    void SpawnAndBind()
+    {
+        currentInstance = Instantiate(
+            prefab,
+            spawnPoint.position,
+            spawnPoint.rotation
+        );
+
+        movementScript = currentInstance.GetComponent<VehicleLikeMovement>();
+
+        if (miniRoomContentBuilder != null)
+            miniRoomContentBuilder.RegisterCar(currentInstance.transform);
+
+        if (movementScript != null && buttonWrapper != null)
+        {
+            buttonWrapper.WhenSelect.AddListener(movementScript.RecordInitialTransform);
+        }
+
+        Debug.Log("[PrefabSpawner] Spawned and bound RecordInitialTransform.");
+    }
+
+    void UnbindAndDestroy()
+    {
+        if (movementScript != null && buttonWrapper != null)
+        {
+            buttonWrapper.WhenSelect.RemoveListener(movementScript.RecordInitialTransform);
+        }
+
+        if (miniRoomContentBuilder != null)
+            miniRoomContentBuilder.ClearCar();
+
+        Destroy(currentInstance);
+
+        currentInstance = null;
+        movementScript = null;
+
+        Debug.Log("[PrefabSpawner] Destroyed and listener removed.");
+    }
+
 
     // 👇 如果你還想保留 Reset 功能
     public void ResetRotation()
