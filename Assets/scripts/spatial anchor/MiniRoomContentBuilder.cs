@@ -177,7 +177,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
                     {
                         if (!(labelWhiteList == RoomLabelMask.NONE || (labelWhiteList & mask) == 0))
                         {
-                            CreateLabelForRenderer(mr, mask.ToString(), goParent.transform);
+                            CreateLabelForRenderer(mr, mask, goParent.transform);
                         }
                     }
                 }
@@ -280,7 +280,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         return true;
     }
 
-    private void CreateLabelForRenderer(Renderer r, string text, Transform parent)
+    private void CreateLabelForRenderer(Renderer r, RoomLabelMask mask, Transform parent)
     {
         Bounds b = r.bounds;
 
@@ -289,12 +289,16 @@ public class MiniRoomContentBuilder : MonoBehaviour
             Vector3.up * (b.extents.y + labelOffset.y) * scaleFactor;
 
         GameObject go = Instantiate(labelPrefab, parent);
-        go.name = $"Label_{text}";
+        go.name = $"Label_{mask}";
         go.transform.position = worldPos;
 
         var uiText = go.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
         if (uiText != null)
-            uiText.text = text;
+            uiText.text = mask.ToString();
+
+        var label = go.GetComponent<RoomLabel>();
+        if (label != null)
+            label.labelType = mask;
 
         // 抵銷 MiniRoom scale
         // go.transform.localScale *= scaleFactor * 2f;

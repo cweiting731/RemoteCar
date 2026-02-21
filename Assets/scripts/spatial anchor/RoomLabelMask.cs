@@ -18,4 +18,6 @@ public enum RoomLabelMask
     LAMP         = 1 << 11,
     PLANT        = 1 << 12,
     WALL_ART     = 1 << 13,
+
+    EVERYTHING   = ~0
 }
