@@ -167,6 +167,11 @@ public class MiniRoomContentBuilder : MonoBehaviour
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 mr.receiveShadows = false;
 
+                var mc = go.AddComponent<MeshCollider>();
+                mc.sharedMesh = mf.sharedMesh;
+
+                go.layer = LayerMask.NameToLayer("MiniRoomEnvironment");
+
                 if (useOverrideMaterial && overrideMaterial != null)
                     mr.sharedMaterial = overrideMaterial;
                 
