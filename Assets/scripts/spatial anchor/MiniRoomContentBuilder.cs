@@ -9,6 +9,10 @@ public class MiniRoomContentBuilder : MonoBehaviour
     [Header("Head / Camera")]
     public Transform head;
 
+    [Header("Alignment")]
+    public Transform uiPanelTransform; // 拖入你的 Map Table 或面板物件
+    public float hoverHeight = 0.02f;  // 懸浮高度 (2cm = 0.02m)
+
     [Header("Room search")]
     public string roomNamePrefix = "Room -";
 
@@ -45,9 +49,9 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
     private IEnumerator Start()
     {
-        if (head == null)
+        if (uiPanelTransform == null)
         {
-            Debug.LogError("Head not assigned");
+            Debug.LogError("UI Panel Transform not assigned");
             yield break;
         }
 
@@ -79,22 +83,51 @@ public class MiniRoomContentBuilder : MonoBehaviour
         PrepareRootPlacement();
         RebuildContent();
         UpdateRootBoxCollider();
+        // === 新增精確對位邏輯 ===
+        AlignToPanel();
     }
 
     private void PrepareRootPlacement()
     {
         if (!placeOnceInFront || _placed) return;
 
-        transform.position =
-            head.position
-            + head.right * offsetInFrontOfEyes.x
-            + head.up * offsetInFrontOfEyes.y
-            + head.forward * offsetInFrontOfEyes.z;
+        if (uiPanelTransform != null)
+        {
+            // 1. 先將 MiniRoom 移動到面板的中心位置
+            transform.position = uiPanelTransform.position;
+
+            // 2. 計算 MiniRoom 模型生成後的包圍盒 (確保我們知道底部在哪)
+            // 注意：這裡需要先有內容才能算包圍盒，或是在生成內容後再補位
+            // 下面我們在 UpdateRootBoxCollider 之後做精確對位
+        }
+        else
+        {
+            // 原有的頭部跟隨邏輯（作為備案）
+            transform.position = head.position + head.forward * offsetInFrontOfEyes.z;
+        }
 
         Vector3 fwd = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
         transform.rotation = Quaternion.LookRotation(fwd, Vector3.up);
 
         _placed = true;
+    }
+
+    private void AlignToPanel()
+    {
+        if (uiPanelTransform == null) return;
+
+        var col = GetComponent<BoxCollider>();
+        if (!col) return;
+
+        // 計算 Bounding Box 的底端相對於 transform 中心點的距離
+        // col.center.y 是中心，col.size.y * 0.5f 是半高
+        float bottomLocalY = col.center.y - (col.size.y * 0.5f);
+        
+        // 將世界座標調整為：面板位置 + 懸浮高度 - 模型底部的局部偏移
+        Vector3 newPos = uiPanelTransform.position;
+        newPos.y += hoverHeight - (bottomLocalY * transform.lossyScale.y);
+        
+        transform.position = newPos;
     }
 
     private void RebuildContent()
