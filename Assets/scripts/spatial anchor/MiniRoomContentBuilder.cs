@@ -49,6 +49,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
     private IEnumerator Start()
     {
+        // 這版以面板對位為主，面板沒指定就不啟動建構
         if (uiPanelTransform == null)
         {
             Debug.LogError("UI Panel Transform not assigned");
@@ -61,6 +62,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
     private IEnumerator WaitForRoomRoots()
     {
+        // 等待場景中的 Room 掃描完成，避免 Start 當下資料尚未載入
         while (_roomRoots.Count == 0)
         {
             var rooms = GameObject
@@ -80,10 +82,11 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
     public void BuildOrRebuild()
     {
+        // 1) 放置 root 2) 重建內容 3) 更新碰撞邊界 4) 最後做面板精準對位
         PrepareRootPlacement();
         RebuildContent();
         UpdateRootBoxCollider();
-        // === 新增精確對位邏輯 ===
+        // 內容重建後 bounds 會改變，對位務必放在最後
         AlignToPanel();
     }
 
@@ -93,12 +96,10 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
         if (uiPanelTransform != null)
         {
-            // 1. 先將 MiniRoom 移動到面板的中心位置
+            // 先把 root 放到面板中心，真正高度在 AlignToPanel() 再微調
             transform.position = uiPanelTransform.position;
 
-            // 2. 計算 MiniRoom 模型生成後的包圍盒 (確保我們知道底部在哪)
-            // 注意：這裡需要先有內容才能算包圍盒，或是在生成內容後再補位
-            // 下面我們在 UpdateRootBoxCollider 之後做精確對位
+            // 由於這時還沒建立內容，無法正確算底部高度，因此先略過
         }
         else
         {
@@ -119,11 +120,10 @@ public class MiniRoomContentBuilder : MonoBehaviour
         var col = GetComponent<BoxCollider>();
         if (!col) return;
 
-        // 計算 Bounding Box 的底端相對於 transform 中心點的距離
-        // col.center.y 是中心，col.size.y * 0.5f 是半高
+        // col.center.y 為中心，col.size.y * 0.5f 為半高，兩者可推出模型底部 local Y
         float bottomLocalY = col.center.y - (col.size.y * 0.5f);
         
-        // 將世界座標調整為：面板位置 + 懸浮高度 - 模型底部的局部偏移
+        // 目標高度 = 面板高度 + 懸浮高度；再扣掉模型底部對 root 的偏移
         Vector3 newPos = uiPanelTransform.position;
         newPos.y += hoverHeight - (bottomLocalY * transform.lossyScale.y);
         
@@ -137,6 +137,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
         _contentRoot = new GameObject("MiniRoomContent").transform;
         _contentRoot.SetParent(transform, false);
+        // 所有 mini 內容都掛在 contentRoot，方便整體刪除與重建
         _contentRoot.localScale = Vector3.one * scaleFactor;
 
         // ===== Collect all renderers =====
@@ -158,7 +159,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         Vector3 combinedCenterWorld = combinedBounds.center;
         _roomCenterLocal = combinedCenterWorld;
 
-        // 使用第一個 room 當 reference（因為都在 0,0,0）
+        // 以第一個 room 作為共同參考座標，讓多個 room 可對齊在同一 mini 空間
         Transform refRoom = _roomRoots[0];
         Vector3 combinedCenterLocal =
             refRoom.InverseTransformPoint(combinedCenterWorld);
@@ -190,6 +191,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
                 go.transform.localPosition = localPos - combinedCenterLocal;
                 go.transform.localRotation = localRot;
+                // 用 lossyScale 保留來源在世界的最終縮放比例
                 go.transform.localScale = mf.transform.lossyScale;
 
                 go.AddComponent<MeshFilter>().sharedMesh =
@@ -237,6 +239,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         for (int i = 1; i < rs.Length; i++)
             b.Encapsulate(rs[i].bounds);
 
+        // 將世界 bounds 轉回 root local，供 AlignToPanel 計算底部高度
         col.center = transform.InverseTransformPoint(b.center);
         col.size = b.size / transform.lossyScale.x;
     }
@@ -246,6 +249,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
         if (!playerMarkerPrefab) return;
 
         GameObject marker = Instantiate(playerMarkerPrefab, transform, false);
+        // mini 內容被縮小後，marker 反向放大回可視尺寸
         marker.transform.localScale = Vector3.one / scaleFactor;
 
         var ctrl = marker.GetComponent<MarkerController>();
@@ -294,6 +298,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
     // ================= Label rebuild =================
     private bool TryGetMaskFromName(string objectName, out RoomLabelMask mask)
     {
+        // 透過命名規則把 mesh 對應到語意類型，供 Label 與後續邏輯使用
         string n = objectName.ToUpperInvariant();
 
         if (n.Contains("FLOOR"))        { mask = RoomLabelMask.FLOOR; return true; }
@@ -328,6 +333,7 @@ public class MiniRoomContentBuilder : MonoBehaviour
 
         GameObject go = Instantiate(labelPrefab, parent);
         go.name = $"Label_{mask}";
+        // 直接放世界座標，避免受 parent 旋轉/縮放影響造成標籤位置偏移
         go.transform.position = worldPos;
 
         var uiText = go.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
