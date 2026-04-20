@@ -90,6 +90,18 @@ public class MiniRoomContentBuilder : MonoBehaviour
         AlignToPanel();
     }
 
+    // 輸入角度(度數)旋轉此物件，預設繞 Y 軸
+    public void RotateByInput(float angleDegrees)
+    {
+        transform.Rotate(0f, angleDegrees, 0f, Space.World);
+    }
+
+    // 直接設定此物件的世界旋轉角度
+    public void SetWorldRotation(Vector3 eulerAngles)
+    {
+        transform.rotation = Quaternion.Euler(eulerAngles);
+    }
+
     private void PrepareRootPlacement()
     {
         if (!placeOnceInFront || _placed) return;
@@ -107,8 +119,20 @@ public class MiniRoomContentBuilder : MonoBehaviour
             transform.position = head.position + head.forward * offsetInFrontOfEyes.z;
         }
 
-        Vector3 fwd = Vector3.ProjectOnPlane(head.forward, Vector3.up).normalized;
-        transform.rotation = Quaternion.LookRotation(fwd, Vector3.up);
+        // --- 修改這裡 ---
+        // 取得頭部的前方向量
+        Vector3 headForward = head.forward;
+        
+        // 將向量投影到水平面上 (去除 Y 軸影響)，確保模型只會水平轉動
+        Vector3 horizontalForward = Vector3.ProjectOnPlane(headForward, Vector3.up).normalized;
+        
+        // 如果投影後向量太小（例如垂直往上看），則給予一個預設值避免報錯
+        if (horizontalForward.sqrMagnitude < 0.01f) {
+            horizontalForward = head.up; // 或者使用 Vector3.forward
+        }
+
+        transform.rotation = Quaternion.LookRotation(horizontalForward, Vector3.up);
+        // ----------------
 
         _placed = true;
     }
