@@ -3955,12 +3955,12 @@ GameObject:
   - component: {fileID: 440969572}
   - component: {fileID: 440969571}
   m_Layer: 4
-  m_Name: Info Content
+  m_Name: Car Control Info
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &440969570
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3975,10 +3975,10 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 2000461891}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 668.75, y: -124.95}
-  m_SizeDelta: {x: 894.8, y: 249.9}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 480.3, y: 249.9}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &440969571
 MonoBehaviour:
@@ -4000,11 +4000,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: '
+  m_text: 'Car Control Info
 
-    loading...
-
-    loading...'
+'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -4685,6 +4683,10 @@ PrefabInstance:
       propertyPath: _centerEyeCamera
       value: 
       objectReference: {fileID: 1451448457}
+    - target: {fileID: 2978571458893240916, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3903482226209413040, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: m_Enabled
       value: 1
@@ -4753,6 +4755,10 @@ PrefabInstance:
       propertyPath: _ovrCameraRig
       value: 
       objectReference: {fileID: 1745889652}
+    - target: {fileID: 8642537477760321812, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -5704,6 +5710,7 @@ MonoBehaviour:
   topicName: /command/car
   publishRateHz: 15
   keepAliveSeconds: 0.25
+  controlInfo: {fileID: 440969571}
 --- !u!114 &598388014
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9390,7 +9397,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 1116.2, y: 249.9}
+  m_SizeDelta: {x: 639.7, y: 249.9}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1069080536
 MonoBehaviour:

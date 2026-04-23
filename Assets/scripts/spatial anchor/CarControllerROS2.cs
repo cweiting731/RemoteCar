@@ -1,6 +1,7 @@
 using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
-using RosMessageTypes.Std; // 需要安裝 ROS-TCP-Connector 的訊息包
+using RosMessageTypes.Std;
+using TMPro; // 需要安裝 ROS-TCP-Connector 的訊息包
 
 public class CarControllerROS2 : MonoBehaviour
 {
@@ -8,6 +9,9 @@ public class CarControllerROS2 : MonoBehaviour
     public string topicName = "/command/car";
     public int publishRateHz = 15; // 發布頻率 (Hz)
     public float keepAliveSeconds = 0.25f; // 即使指令沒變，也週期性送出避免下游 timeout
+    
+    [Header("Info")]
+    public TextMeshProUGUI controlInfo;
     
     // ROSConnection 負責處理與 ROS-TCP-Endpoint 的通訊
     private ROSConnection ros;
@@ -29,12 +33,15 @@ public class CarControllerROS2 : MonoBehaviour
         ros = ROSConnection.GetOrCreateInstance();
         // 註冊發布者，指定 Topic 名稱與訊息類型
         ros.RegisterPublisher<StringMsg>(topicName);
+
+        UpdateControlInfoUI();
     }
 
     void Update()
     {
         // 每幀更新控制值，再依照發送節流規則送出 ROS 指令
         UpdateInput();
+        UpdateControlInfoUI();
 
         // 控制發布頻率：用累加減法避免掉幀後計時漂移
         float publishInterval = 1.0f / Mathf.Max(1, publishRateHz);
@@ -45,7 +52,7 @@ public class CarControllerROS2 : MonoBehaviour
         {
             publishTimer -= publishInterval;
 
-            bool changed = (th != lastPublishedTh) || (hd != lastPublishedHd);
+            bool changed = (th != lastPublishedTh) || (hd != lastPublishedHd) || true; // ▲ 強制每次都發送，確保下游持續收到指令避免 timeout
             bool keepAliveDue = keepAliveTimer >= Mathf.Max(0.05f, keepAliveSeconds);
 
             if (changed || keepAliveDue)
@@ -93,5 +100,27 @@ public class CarControllerROS2 : MonoBehaviour
 
         // 調試顯示 (拿掉避免狂洗Console導致卡頓)
         // Debug.Log($"[ROS2 Publish] {topicName}: {cmdString}");
+    }
+
+    void UpdateControlInfoUI()
+    {
+        if (controlInfo == null)
+        {
+            return;
+        }
+
+        int forwardPercent = Mathf.RoundToInt(Mathf.Clamp01(currentSy) * 100f);
+        int backwardPercent = Mathf.RoundToInt(Mathf.Clamp01(-currentSy) * 100f);
+        int rightPercent = Mathf.RoundToInt(Mathf.Clamp01(currentSx) * 100f);
+        int leftPercent = Mathf.RoundToInt(Mathf.Clamp01(-currentSx) * 100f);
+
+        controlInfo.text =
+            "Car Control Info\n" +
+            $"  th: {th}\n" +
+            $"  hd: {hd}\n" +
+            $"  Forward: {forwardPercent}%\n" +
+            $"  Right: {rightPercent}%\n" +
+            $"  Left: {leftPercent}%\n" +
+            $"  Backward: {backwardPercent}%";
     }
 }
