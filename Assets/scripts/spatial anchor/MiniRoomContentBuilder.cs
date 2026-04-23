@@ -16,6 +16,9 @@ public class MiniRoomContentBuilder : MonoBehaviour
     [Header("Room search")]
     public string roomNamePrefix = "Room -";
 
+    [Header("Input Source")]
+    public OVRInputGetter ovrInputGetter;
+
     [Header("Mini placement")]
     public float scaleFactor = 0.01f;
     public Vector3 offsetInFrontOfEyes = new Vector3(0f, 0.7f, 0.7f);
@@ -60,6 +63,11 @@ public class MiniRoomContentBuilder : MonoBehaviour
         BuildOrRebuild();
     }
 
+    private void Update()
+    {
+        Rotate();
+    }
+
     private IEnumerator WaitForRoomRoots()
     {
         // 等待場景中的 Room 掃描完成，避免 Start 當下資料尚未載入
@@ -91,9 +99,13 @@ public class MiniRoomContentBuilder : MonoBehaviour
     }
 
     // 輸入角度(度數)旋轉此物件，預設繞 Y 軸
-    public void RotateByInput(float angleDegrees)
+    private void Rotate()
     {
-        transform.Rotate(0f, angleDegrees, 0f, Space.World);
+        if (ovrInputGetter == null) return;
+        if (ovrInputGetter.isRightGripPressed)
+        {
+            transform.Rotate(0f, ovrInputGetter.rightStickX * ovrInputGetter.rotateSpeed * Time.deltaTime, 0f, Space.World);
+        }
     }
 
     // 直接設定此物件的世界旋轉角度

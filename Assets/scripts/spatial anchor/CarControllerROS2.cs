@@ -12,6 +12,9 @@ public class CarControllerROS2 : MonoBehaviour
     
     [Header("Info")]
     public TextMeshProUGUI controlInfo;
+
+    [Header("Input Source")]
+    public OVRInputGetter ovrInputGetter;  // ▲ 統一輸入來源
     
     // ROSConnection 負責處理與 ROS-TCP-Endpoint 的通訊
     private ROSConnection ros;
@@ -65,13 +68,18 @@ public class CarControllerROS2 : MonoBehaviour
 
     void UpdateInput()
     {
-        // 只保留左手搖桿輸入，避免鍵盤測試邏輯干擾正式控制流程
-        Vector2 stick = OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick, OVRInput.Controller.LTouch);
-        currentSx = stick.x;  // 左右
-        currentSy = stick.y;  // 前後
+        // 從 OVRInputGetter 統一獲取輸入值
+        if (ovrInputGetter == null) return;
+        if (ovrInputGetter.isRightGripPressed) return; // 握持鍵按下時不控制小車，避免與旋轉衝突
+
+        currentSy = ovrInputGetter.leftStickY;  // 左控制器：前後
+        currentSx = ovrInputGetter.rightStickX; // 右控制器：左右（當握持鍵未按下時）
 
         // 將 -1~1 的搖桿值轉成 0~255，方便下游控制器解析
-        hd = (int)((-currentSx + 1f) * 0.5f * 255f);
+        if (!ovrInputGetter.isRightGripPressed)
+        {
+            hd = (int)((currentSx + 1f) * 0.5f * 255f);
+        }
         th = (int)((-currentSy + 1f) * 0.5f * 255f);
     }
 
