@@ -5,7 +5,6 @@ public class UIFollowController : MonoBehaviour
 {
     [Header("References")]
     public Transform cameraTransform;
-    public Toggle anchorToggle;
 
     [Header("Follow Settings")]
     public float followDistance = 1.5f;
@@ -26,26 +25,14 @@ public class UIFollowController : MonoBehaviour
         {
             cameraTransform = Camera.main.transform;
         }
-
-        if (anchorToggle != null)
-        {
-            anchorToggle.onValueChanged.AddListener(OnToggleChanged);
-        }
-        else
-        {
-            Debug.LogWarning("[UIFollowController] anchorToggle is not assigned.");
-        }
     }
 
     void OnDestroy()
     {
-        if (anchorToggle != null)
-        {
-            anchorToggle.onValueChanged.RemoveListener(OnToggleChanged);
-        }
+        
     }
 
-    void OnToggleChanged(bool value)
+    public void ChangeAnchor(bool value)
     {
         isAnchored = value;
         Debug.Log($"[UIFollowController] Anchor toggled: {isAnchored}");
