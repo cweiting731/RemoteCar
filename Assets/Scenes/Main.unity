@@ -10569,6 +10569,7 @@ GameObject:
   - component: {fileID: 615887501}
   - component: {fileID: 615887495}
   - component: {fileID: 615887500}
+  - component: {fileID: 615887502}
   m_Layer: 0
   m_Name: MiniRoomRoot
   m_TagString: Untagged
@@ -10784,6 +10785,25 @@ MonoBehaviour:
         Min: 1
         Max: 1
   _resetScaleResponsivenessOnConstraintOvershoot: 0
+--- !u!114 &615887502
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 615887494}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89df32a16ab6be54f8c0bfb3b148959a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  inputGetter: {fileID: 598388014}
+  isMoveActive: 0
+  isRotateActive: 0
+  moveSpeed: 1.5
+  moveAcceleration: 8
+  rotateSpeed: 60
+  rotateAcceleration: 10
 --- !u!1001 &619430563
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -16566,6 +16586,111 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1350111207}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &994812877
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 994812878}
+  - component: {fileID: 994812881}
+  - component: {fileID: 994812880}
+  - component: {fileID: 994812879}
+  m_Layer: 4
+  m_Name: Cube
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &994812878
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 994812877}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1629732713}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &994812879
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 994812877}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!23 &994812880
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 994812877}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &994812881
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 994812877}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!1 &1001219263
 GameObject:
   m_ObjectHideFlags: 0
@@ -25286,6 +25411,9 @@ MonoBehaviour:
   tglSLAMMoveRot: {fileID: 1707003049}
   tglLock: {fileID: 1142840190149625307}
   carController: {fileID: 598388013}
+  rootRoomController: {fileID: 2806941712824896360}
+  miniRoomController: {fileID: 615887502}
+  slamRoomController: {fileID: 1629732714}
 --- !u!1 &1388068449 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 558185252244138612, guid: 41f0c6b657dffc944900710127356b17, type: 3}
@@ -29419,7 +29547,7 @@ GameObject:
   - component: {fileID: 1629732713}
   - component: {fileID: 1629732714}
   m_Layer: 4
-  m_Name: ROS2 Point Cloud
+  m_Name: SLAMRoomRoot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -29437,7 +29565,9 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 2020351485}
+  - {fileID: 994812878}
   m_Father: {fileID: 2806941712824896354}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1629732714
@@ -29449,21 +29579,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 1629732712}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4dcef4cd6018fc14eafc4cc1904b2476, type: 3}
+  m_Script: {fileID: 11500000, guid: 89df32a16ab6be54f8c0bfb3b148959a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  topicName: /slam/point_cloud
-  targetParticleSystem: {fileID: 0}
-  particleMaterial: {fileID: 0}
-  defaultPointColor: {r: 0, g: 1, b: 1, a: 1}
-  pointSize: 0.02
-  pointScale: 1
-  maxPoints: 200000
-  frameMode: 2
-  manualPositionOffset: {x: 0, y: 0, z: 0}
-  enableDebugLog: 1
-  logEveryNFrames: 30
-  renderIntervalSeconds: 2
+  inputGetter: {fileID: 598388014}
+  isMoveActive: 0
+  isRotateActive: 0
+  moveSpeed: 1.5
+  moveAcceleration: 8
+  rotateSpeed: 60
+  rotateAcceleration: 10
 --- !u!1 &1637264540
 GameObject:
   m_ObjectHideFlags: 0
@@ -34956,6 +35081,62 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1049392141}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2020351484
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2020351485}
+  - component: {fileID: 2020351486}
+  m_Layer: 4
+  m_Name: ROS2 point cloud
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &2020351485
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2020351484}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1629732713}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2020351486
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2020351484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4dcef4cd6018fc14eafc4cc1904b2476, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  topicName: /slam/point_cloud
+  targetParticleSystem: {fileID: 0}
+  particleMaterial: {fileID: 0}
+  defaultPointColor: {r: 0, g: 1, b: 1, a: 1}
+  pointSize: 0.02
+  pointScale: 1
+  maxPoints: 200000
+  frameMode: 2
+  manualPositionOffset: {x: 0, y: 0, z: 0}
+  enableDebugLog: 1
+  logEveryNFrames: 30
+  renderIntervalSeconds: 2
 --- !u!1 &2021258096 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 558185252244138612, guid: 41f0c6b657dffc944900710127356b17, type: 3}
@@ -39860,7 +40041,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2806941712824896358}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f5626a0b1dc955a43be59ce7ea116678, type: 3}
   m_Name: 
@@ -39916,7 +40097,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2806941712824896358}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 317e663e2bb60ea408fe22b908b59295, type: 3}
   m_Name: 
@@ -40067,6 +40248,7 @@ GameObject:
   - component: {fileID: 2806941712824896357}
   - component: {fileID: 2806941712824896359}
   - component: {fileID: 2806941712824896355}
+  - component: {fileID: 2806941712824896360}
   m_Layer: 4
   m_Name: Map Table
   m_TagString: Untagged
@@ -40081,7 +40263,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2806941712824896358}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3ffe41fe81087fa41a2062cc69b99615, type: 3}
   m_Name: 
@@ -40090,6 +40272,25 @@ MonoBehaviour:
   _addNewPointsToFront: 0
   _forwardElement: {fileID: 0}
   _canvas: {fileID: 2806941713715801662}
+--- !u!114 &2806941712824896360
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2806941712824896358}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89df32a16ab6be54f8c0bfb3b148959a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  inputGetter: {fileID: 598388014}
+  isMoveActive: 0
+  isRotateActive: 0
+  moveSpeed: 1.5
+  moveAcceleration: 8
+  rotateSpeed: 60
+  rotateAcceleration: 10
 --- !u!1 &2806941713715801649
 GameObject:
   m_ObjectHideFlags: 0

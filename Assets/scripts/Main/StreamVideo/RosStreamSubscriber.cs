@@ -76,6 +76,9 @@ namespace StreamVideo
                 if (fpsGraph != null)
                 {
                     fpsGraph.AddSample(currentFps);
+                    // test data 
+                    // float testFps = 15f + Random.Range(-5f, 5f);
+                    // fpsGraph.AddSample(testFps);
                 }
             }
 

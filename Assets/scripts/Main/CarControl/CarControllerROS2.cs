@@ -34,7 +34,8 @@ namespace CarControl
         private float keepAliveTimer = 0f;
 
         // Enum
-        private CarControlMode carControlMode = CarControlMode.SingleHand;
+        private bool singleHandMode = true;
+        private bool doubleHandMode = false;
 
         void Start()
         {
@@ -77,23 +78,24 @@ namespace CarControl
             // 從 OVRInputGetter 統一獲取輸入值
             if (ovrInputGetter == null) return;
 
-            if (carControlMode == CarControlMode.SingleHand)
+            if (singleHandMode)
             {
                 currentSx = ovrInputGetter.leftStickX;
                 currentSy = ovrInputGetter.leftStickY;
 
                 hd = (int)((currentSx + 1f) * 0.5f * 255f);
                 th = (int)((-currentSy + 1f) * 0.5f * 255f);
+                carVisualizer?.SetInput(currentSx, currentSy); // 更新視覺化反饋
             }
-            else if (carControlMode == CarControlMode.DoubleHand)
+            else if (doubleHandMode)
             {
                 currentSx = ovrInputGetter.rightStickX;
                 currentSy = ovrInputGetter.leftStickY;
 
                 hd = (int)((currentSx + 1f) * 0.5f * 255f);
                 th = (int)((-currentSy + 1f) * 0.5f * 255f);
+                carVisualizer?.SetInput(currentSx, currentSy); // 更新視覺化反饋
             }
-            carVisualizer?.SetInput(currentSx, currentSy); // 更新視覺化反饋
         }
 
         void PublishCarCommand()
@@ -145,11 +147,22 @@ namespace CarControl
                 $"  Backward: {backwardPercent}%";
         }
 
-        public void SetCarControlMode(CarControlMode mode)
+        public void SetSingleHandMode(bool enabled)
         {
-            carControlMode = mode;
-            // 根據模式調整控制邏輯（如果需要）
-            // 目前在 UpdateInput 中統一處理，這裡可以擴展為不同模式的專屬邏輯
+            singleHandMode = enabled;
+            if (enabled)
+            {
+                doubleHandMode = false;
+            }
+        }
+
+        public void SetDoubleHandMode(bool enabled)
+        {
+            doubleHandMode = enabled;
+            if (enabled)
+            {
+                singleHandMode = false;
+            }
         }
     }
 }
