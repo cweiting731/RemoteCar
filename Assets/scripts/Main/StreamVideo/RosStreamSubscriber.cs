@@ -3,6 +3,7 @@ using Unity.Robotics.ROSTCPConnector;
 using UnityEngine.UI;
 using UnityEngine;
 using TMPro;
+using ROS2;
 
 namespace StreamVideo
 {
@@ -10,15 +11,14 @@ namespace StreamVideo
     {
         [Header("ROS2 Settings")]
         public string topicName = "/camera/colored"; // 或者 "/camera" (灰階)
-        public string carControlTopicName = "/command/car";
 
         [Header("Debug")]
         public bool enableDebugLog = true;
         public int logEveryNFrames = 30;
 
         [Header("Info")]
-        public TextMeshProUGUI ros2Info;
-        public UIRealtimeGraph fpsGraph;
+        public bool isTest = false;
+        public ROS2InfoManager ros2Info;
 
         private Texture2D texture; // 補上遺漏的宣告
         private RawImage rawImage;
@@ -35,6 +35,9 @@ namespace StreamVideo
         private float fpsTimer = 0f;
         private int fpsFrameCount = 0;
         private float currentFps = 0f;
+        private long throughputBytes = 0;
+        private float currentMbps = 0f;
+        private readonly object statsLock = new object();
         private ROSConnection ros;
 
         // 只保留最新一張影像，避免高速影像進來時在主執行緒排隊塞爆
@@ -59,7 +62,6 @@ namespace StreamVideo
                 Debug.Log($"[ROS2 Image] Subscribed to topic: {topicName}");
             }
 
-            UpdateInfoText();
         }
 
         void Update()
@@ -68,18 +70,33 @@ namespace StreamVideo
             // 每秒更新一次 FPS
             if (fpsTimer >= 0.5f)
             {
-                currentFps = fpsFrameCount / fpsTimer;
-                fpsFrameCount = 0;
-                fpsTimer = 0f;
-
-                UpdateInfoText();
-                if (fpsGraph != null)
+                long bytesInWindow;
+                lock (statsLock)
                 {
-                    fpsGraph.AddSample(currentFps);
-                    // test data 
-                    // float testFps = 15f + Random.Range(-5f, 5f);
-                    // fpsGraph.AddSample(testFps);
+                    currentFps = fpsFrameCount / fpsTimer;
+                    fpsFrameCount = 0;
+                    bytesInWindow = throughputBytes;
+                    throughputBytes = 0;
                 }
+
+                // 如果是測試模式，模擬 Mbps 數值；否則根據實際收到的位元組數計算 Mbps
+                if (isTest)                {
+                    currentMbps = Random.Range(5f, 20f); // 模擬 5-20 Mbps 的範圍
+                }
+                else
+                {
+                    currentMbps = bytesInWindow * 8f / fpsTimer / 1_000_000f;
+                }
+                if (ros2Info != null)
+                {
+                    ros2Info.SetTopicMbps(topicName, currentMbps);
+                    ros2Info.UpdateInfo();
+                }
+                else {
+                    Debug.LogWarning("[ROS2StreamSubscriber] ROS2InfoManager reference is not assigned.");
+                }
+
+                fpsTimer = 0f;
             }
 
             // 每幀最多只啟動一次處理；如果上一張還沒做完，就先等下一輪更新
@@ -90,25 +107,19 @@ namespace StreamVideo
             }
         }
 
-        void UpdateInfoText()
-        {
-            if (ros2Info != null && ros != null)
-            {
-                string ip = ros.RosIPAddress;
-                int port = ros.RosPort;
-                string status = ros.HasConnectionError ? "<color=red>Error</color>" : "<color=green>Connected</color>";
-
-                ros2Info.text = $"ROS2 Info\n  IP: {ip}:{port}\n  Status: {status}\n  Stream Topic: {topicName}\n  Stream FPS: {currentFps:F1}\n  Control Topic: {carControlTopicName}";
-            }
-        }
 
         void ReceiveImage(ImageMsg msg)
         {
             receivedImageCount++;
-            fpsFrameCount++; // 增加影像幀數計數
 
             // 在回呼當下先把資料複製出來，避免後續背景處理時碰到訊息物件生命週期問題
             int dataLength = msg.data != null ? msg.data.Length : 0;
+            lock (statsLock)
+            {
+                fpsFrameCount++;
+                throughputBytes += dataLength;
+            }
+
             lock (latestFrameLock)
             {
                 if (latestRawData == null || latestRawData.Length != dataLength)

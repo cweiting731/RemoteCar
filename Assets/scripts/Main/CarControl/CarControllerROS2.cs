@@ -1,7 +1,8 @@
 using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
 using RosMessageTypes.Std;
-using TMPro; // 需要安裝 ROS-TCP-Connector 的訊息包
+using TMPro;
+using ROS2; // 需要安裝 ROS-TCP-Connector 的訊息包
 
 namespace CarControl
 {
@@ -13,7 +14,7 @@ namespace CarControl
         public float keepAliveSeconds = 0.25f; // 即使指令沒變，也週期性送出避免下游 timeout
         
         [Header("Info")]
-        public TextMeshProUGUI controlInfo;
+        public ROS2InfoManager ros2InfoManager; // ▲ 用於更新 ROS2 連線與頻寬資訊的管理器
 
         [Header("Input Source")]
         public OVRInputGetter ovrInputGetter;  // ▲ 統一輸入來源
@@ -44,14 +45,12 @@ namespace CarControl
             // 註冊發布者，指定 Topic 名稱與訊息類型
             ros.RegisterPublisher<StringMsg>(topicName);
 
-            UpdateControlInfoUI();
         }
 
         void Update()
         {
             // 每幀更新控制值，再依照發送節流規則送出 ROS 指令
             UpdateInput();
-            UpdateControlInfoUI();
 
             // 控制發布頻率：用累加減法避免掉幀後計時漂移
             float publishInterval = 1.0f / Mathf.Max(1, publishRateHz);
@@ -123,28 +122,11 @@ namespace CarControl
 
             // 調試顯示 (拿掉避免狂洗Console導致卡頓)
             // Debug.Log($"[ROS2 Publish] {topicName}: {cmdString}");
-        }
 
-        void UpdateControlInfoUI()
-        {
-            if (controlInfo == null)
-            {
-                return;
-            }
-
-            int forwardPercent = Mathf.RoundToInt(Mathf.Clamp01(currentSy) * 100f);
-            int backwardPercent = Mathf.RoundToInt(Mathf.Clamp01(-currentSy) * 100f);
-            int rightPercent = Mathf.RoundToInt(Mathf.Clamp01(currentSx) * 100f);
-            int leftPercent = Mathf.RoundToInt(Mathf.Clamp01(-currentSx) * 100f);
-
-            controlInfo.text =
-                "Car Control Info\n" +
-                $"  th: {th}\n" +
-                $"  hd: {hd}\n" +
-                $"  Forward: {forwardPercent}%\n" +
-                $"  Right: {rightPercent}%\n" +
-                $"  Left: {leftPercent}%\n" +
-                $"  Backward: {backwardPercent}%";
+            // 計算Mbps並發送
+            float messageSizeBytes = System.Text.Encoding.UTF8.GetByteCount(cmdString);
+            float mbps = (messageSizeBytes * 8f) / (publishTimer > 0 ? publishTimer : 1f) / 1_000_000f; // Mbps = (bits / second) / 1,000,000
+            ros2InfoManager?.SetTopicMbps(topicName, mbps); // 更新 ROS2InfoManager 中的頻寬資訊
         }
 
         public void SetSingleHandMode(bool enabled)

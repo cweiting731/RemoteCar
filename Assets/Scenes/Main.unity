@@ -9945,7 +9945,7 @@ MonoBehaviour:
   topicName: /command/car
   publishRateHz: 15
   keepAliveSeconds: 0.25
-  controlInfo: {fileID: 440969571}
+  ros2InfoManager: {fileID: 2000461894}
   ovrInputGetter: {fileID: 598388014}
   carVisualizer: {fileID: 546975974}
 --- !u!114 &598388014
@@ -11314,6 +11314,86 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 631060508}
   m_CullTransparentMesh: 1
+--- !u!1 &633431841
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 633431842}
+  - component: {fileID: 633431844}
+  - component: {fileID: 633431843}
+  m_Layer: 4
+  m_Name: Throughput graph
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &633431842
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 633431841}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -0.10001}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 744277632}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -236.43, y: -117.850075}
+  m_SizeDelta: {x: 472.85, y: 235.7}
+  m_Pivot: {x: 0, y: 0}
+--- !u!114 &633431843
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 633431841}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a01bb7c9ba3a5214faad8c8efda40847, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  timeWindow: 5
+  maxSamples: 300
+  minValue: -5
+  maxValue: 60
+  lineThickness: 4
+  fillArea: 1
+  fillAlpha: 0.2
+  series:
+  - name: Transmit
+    color: {r: 0, g: 1, b: 0, a: 1}
+    enabled: 1
+    useThresholdColors: 0
+  - name: Receive
+    color: {r: 0.17254902, g: 0.3647059, b: 0.5294118, a: 1}
+    enabled: 1
+    useThresholdColors: 0
+  showThresholds: 1
+  warnValue: 10
+  dangerValue: 5
+--- !u!222 &633431844
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 633431841}
+  m_CullTransparentMesh: 1
 --- !u!1 &639888586
 GameObject:
   m_ObjectHideFlags: 0
@@ -12104,7 +12184,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &699728424
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12465,6 +12545,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1640371413}
+  - {fileID: 633431842}
   - {fileID: 549741482}
   m_Father: {fileID: 2000461891}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -16604,7 +16685,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &994812878
 Transform:
   m_ObjectHideFlags: 0
@@ -29085,7 +29166,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!54 &1610797694
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -29714,7 +29795,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1640371413
 RectTransform:
   m_ObjectHideFlags: 0
@@ -29756,8 +29837,15 @@ MonoBehaviour:
   maxValue: 60
   lineThickness: 2
   fillArea: 1
-  warnFPS: 10
-  dangerFPS: 5
+  fillAlpha: 0.2
+  series:
+  - name: Input 1
+    color: {r: 0, g: 1, b: 0, a: 1}
+    enabled: 1
+    useThresholdColors: 1
+  showThresholds: 1
+  warnValue: 10
+  dangerValue: 5
 --- !u!222 &1640371415
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -31426,11 +31514,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   topicName: /camera/colored
-  carControlTopicName: /command/car
   enableDebugLog: 1
   logEveryNFrames: 30
-  ros2Info: {fileID: 1069080536}
-  fpsGraph: {fileID: 1640371414}
+  isTest: 1
+  ros2Info: {fileID: 2000461894}
 --- !u!1 &1709797318
 GameObject:
   m_ObjectHideFlags: 0
@@ -34544,6 +34631,7 @@ GameObject:
   - component: {fileID: 2000461891}
   - component: {fileID: 2000461893}
   - component: {fileID: 2000461892}
+  - component: {fileID: 2000461894}
   m_Layer: 4
   m_Name: ROS2 Info title
   m_TagString: Untagged
@@ -34606,6 +34694,27 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!114 &2000461894
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2000461890}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a2808dfe79f22ba42a56f3384f1ad789, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  infoText: {fileID: 1069080536}
+  realtimeGraph: {fileID: 633431843}
+  ros2Info:
+  - topicName: /command/car
+    isTransport: 1
+  - topicName: /camera/colored
+    isTransport: 0
+  - topicName: /slam/point_cloud
+    isTransport: 0
 --- !u!1 &2008274827
 GameObject:
   m_ObjectHideFlags: 0
@@ -35097,7 +35206,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &2020351485
 Transform:
   m_ObjectHideFlags: 0
@@ -35128,15 +35237,21 @@ MonoBehaviour:
   topicName: /slam/point_cloud
   targetParticleSystem: {fileID: 0}
   particleMaterial: {fileID: 0}
-  defaultPointColor: {r: 0, g: 1, b: 1, a: 1}
+  defaultPointColor: {r: 1, g: 1, b: 1, a: 1}
   pointSize: 0.02
-  pointScale: 1
   maxPoints: 200000
+  miniRoomRoot: {fileID: 1629732713}
+  roomScale: 1
   frameMode: 2
   manualPositionOffset: {x: 0, y: 0, z: 0}
   enableDebugLog: 1
   logEveryNFrames: 30
   renderIntervalSeconds: 2
+  useSimulatedPointCloud: 1
+  simulatedPointCount: 12000
+  simulatedRoomSize: {x: 4, y: 2.5, z: 4}
+  simulatedNoiseAmount: 0.01
+  animateSimulatedNoise: 1
 --- !u!1 &2021258096 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 558185252244138612, guid: 41f0c6b657dffc944900710127356b17, type: 3}
