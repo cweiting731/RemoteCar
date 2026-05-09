@@ -1,8 +1,8 @@
-using UnityEngine;
+using System.Text;
 using Unity.Robotics.ROSTCPConnector;
+using UnityEngine;
 using RosMessageTypes.Std;
-using TMPro;
-using ROS2; // 需要安裝 ROS-TCP-Connector 的訊息包
+using ROS2;
 
 namespace CarControl
 {
@@ -10,17 +10,16 @@ namespace CarControl
     {
         [Header("ROS2 Settings")]
         public string topicName = "/command/car";
-        public int publishRateHz = 15; // 發布頻率 (Hz)
-        public float keepAliveSeconds = 0.25f; // 即使指令沒變，也週期性送出避免下游 timeout
-        
+        public int publishRateHz = 15;
+        public float keepAliveSeconds = 0.25f;
+
         [Header("Info")]
-        public ROS2InfoManager ros2InfoManager; // ▲ 用於更新 ROS2 連線與頻寬資訊的管理器
+        public ROS2InfoManager ros2InfoManager;
 
         [Header("Input Source")]
-        public OVRInputGetter ovrInputGetter;  // ▲ 統一輸入來源
-        public CarVisualizer carVisualizer; // ▲ 可選的視覺化元件，讓玩家看到輸入反饋
-        
-        // ROSConnection 負責處理與 ROS-TCP-Endpoint 的通訊
+        public OVRInputGetter ovrInputGetter;
+        public CarVisualizer carVisualizer;
+
         private ROSConnection ros;
 
         private int th = 127;
@@ -30,29 +29,22 @@ namespace CarControl
         private float currentSx = 0f;
         private float currentSy = 0f;
 
-        // ▲ 新增：用於穩定控制發布頻率的時間計時器
         private float publishTimer = 0f;
         private float keepAliveTimer = 0f;
 
-        // Enum
         private bool singleHandMode = true;
         private bool doubleHandMode = false;
 
-        void Start()
+        private void Start()
         {
-            // 取得 ROS 連結實例
             ros = ROSConnection.GetOrCreateInstance();
-            // 註冊發布者，指定 Topic 名稱與訊息類型
             ros.RegisterPublisher<StringMsg>(topicName);
-
         }
 
-        void Update()
+        private void Update()
         {
-            // 每幀更新控制值，再依照發送節流規則送出 ROS 指令
             UpdateInput();
 
-            // 控制發布頻率：用累加減法避免掉幀後計時漂移
             float publishInterval = 1.0f / Mathf.Max(1, publishRateHz);
             publishTimer += Time.deltaTime;
             keepAliveTimer += Time.deltaTime;
@@ -61,7 +53,7 @@ namespace CarControl
             {
                 publishTimer -= publishInterval;
 
-                bool changed = (th != lastPublishedTh) || (hd != lastPublishedHd) || true; // ▲ 強制每次都發送，確保下游持續收到指令避免 timeout
+                bool changed = th != lastPublishedTh || hd != lastPublishedHd || true;
                 bool keepAliveDue = keepAliveTimer >= Mathf.Max(0.05f, keepAliveSeconds);
 
                 if (changed || keepAliveDue)
@@ -72,10 +64,12 @@ namespace CarControl
             }
         }
 
-        void UpdateInput()
+        private void UpdateInput()
         {
-            // 從 OVRInputGetter 統一獲取輸入值
-            if (ovrInputGetter == null) return;
+            if (ovrInputGetter == null)
+            {
+                return;
+            }
 
             if (singleHandMode)
             {
@@ -84,7 +78,7 @@ namespace CarControl
 
                 hd = (int)((currentSx + 1f) * 0.5f * 255f);
                 th = (int)((-currentSy + 1f) * 0.5f * 255f);
-                carVisualizer?.SetInput(currentSx, currentSy); // 更新視覺化反饋
+                carVisualizer?.SetInput(currentSx, currentSy);
             }
             else if (doubleHandMode)
             {
@@ -93,40 +87,21 @@ namespace CarControl
 
                 hd = (int)((currentSx + 1f) * 0.5f * 255f);
                 th = (int)((-currentSy + 1f) * 0.5f * 255f);
-                carVisualizer?.SetInput(currentSx, currentSy); // 更新視覺化反饋
+                carVisualizer?.SetInput(currentSx, currentSy);
             }
         }
 
-        void PublishCarCommand()
+        private void PublishCarCommand()
         {
-            // 為了避免高負載環境下(每秒15次)持續印 Log 加劇卡頓與 TCP 阻塞，先將其註解
-            /*
-            if (useKeyboardTestInput)
-            {
-                Debug.Log($"[ROS2 Test Input] Keyboard: th={th}, hd={hd} (W/S/A/D)");
-            }
-            else
-            {
-                Debug.Log($"[ROS2 Input] Thumbstick: sx={currentSx:F2}, sy={currentSy:F2} => th={th}, hd={hd}");
-            }
-            */
-
-            // ===== 封裝成 ROS2 String 訊息 =====
             string cmdString = $"th={th},hd={hd}";
             StringMsg msg = new StringMsg(cmdString);
 
-            // ===== 發送至 ROS2 =====
             ros.Publish(topicName, msg);
             lastPublishedTh = th;
             lastPublishedHd = hd;
 
-            // 調試顯示 (拿掉避免狂洗Console導致卡頓)
-            // Debug.Log($"[ROS2 Publish] {topicName}: {cmdString}");
-
-            // 計算Mbps並發送
-            float messageSizeBytes = System.Text.Encoding.UTF8.GetByteCount(cmdString);
-            float mbps = (messageSizeBytes * 8f) / (publishTimer > 0 ? publishTimer : 1f) / 1_000_000f; // Mbps = (bits / second) / 1,000,000
-            ros2InfoManager?.SetTopicMbps(topicName, mbps); // 更新 ROS2InfoManager 中的頻寬資訊
+            long messageSizeBytes = Encoding.UTF8.GetByteCount(cmdString);
+            ros2InfoManager?.RecordTopicBytes(topicName, messageSizeBytes);
         }
 
         public void SetSingleHandMode(bool enabled)

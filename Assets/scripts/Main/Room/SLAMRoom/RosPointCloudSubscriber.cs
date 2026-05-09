@@ -1,4 +1,5 @@
 using System;
+using ROS2;
 using RosMessageTypes.Sensor;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
@@ -28,7 +29,10 @@ namespace Main.Room.SLAMRoom
 		[Header("Mini Room Transform")]
 		public Transform miniRoomRoot;
 		[FormerlySerializedAs("pointScale")]
+		[Tooltip("Target world scale for the room. 1 means the point cloud is rendered at real-world meter size.")]
 		public float roomScale = 1f;
+		[Tooltip("When enabled, parent Transform scale is compensated so roomScale=1 is a real-world 1:1 room.")]
+		public bool roomScaleIsWorldScale = true;
 
 		[Header("Coordinate Conversion")]
 		public PointCloudFrameMode frameMode = PointCloudFrameMode.RosCameraOpticalToUnity;
@@ -41,10 +45,17 @@ namespace Main.Room.SLAMRoom
 		[Header("Update Rate")]
 		public float renderIntervalSeconds = 2f;
 
+		[Header("Info")]
+		public ROS2InfoManager ros2InfoManager; // ▲ 用於更新 ROS2 連線與頻寬資訊的管理器
+
 		[Header("Simulation")]
 		public bool useSimulatedPointCloud = false;
+		[Tooltip("When enabled, simulated room points are generated in a ROS-style frame and converted by frameMode, matching real point cloud data.")]
+		public bool simulatedUsesCoordinateConversion = true;
 		public int simulatedPointCount = 12000;
-		public Vector3 simulatedRoomSize = new Vector3(4f, 2.5f, 4f);
+		[FormerlySerializedAs("simulatedRoomSize")]
+		[Tooltip("Full-size simulated room dimensions in meters when roomScale is 1.")]
+		public Vector3 simulatedRoomSizeMeters = new Vector3(4f, 2.7f, 5f);
 		public float simulatedNoiseAmount = 0.01f;
 		public bool animateSimulatedNoise = true;
 
@@ -59,6 +70,7 @@ namespace Main.Room.SLAMRoom
 		private int receivedCloudCount;
 		private int lastRenderedPointCount;
 		private float lastRenderTime = -9999f;
+		private float lastScaleDebugLogTime = -9999f;
 
 		private int xOffset = -1;
 		private int yOffset = -1;
@@ -83,10 +95,10 @@ namespace Main.Room.SLAMRoom
 			renderIntervalSeconds = Mathf.Max(0.01f, renderIntervalSeconds);
 			maxPoints = Mathf.Max(1, maxPoints);
 			simulatedPointCount = Mathf.Max(1, simulatedPointCount);
-			simulatedRoomSize = new Vector3(
-				Mathf.Max(0.1f, simulatedRoomSize.x),
-				Mathf.Max(0.1f, simulatedRoomSize.y),
-				Mathf.Max(0.1f, simulatedRoomSize.z)
+			simulatedRoomSizeMeters = new Vector3(
+				Mathf.Max(0.1f, simulatedRoomSizeMeters.x),
+				Mathf.Max(0.1f, simulatedRoomSizeMeters.y),
+				Mathf.Max(0.1f, simulatedRoomSizeMeters.z)
 			);
 			simulatedNoiseAmount = Mathf.Max(0f, simulatedNoiseAmount);
 			ApplyRoomScale();
@@ -261,6 +273,11 @@ namespace Main.Room.SLAMRoom
 		{
 			try
 			{
+				if (msg?.data != null)
+				{
+					ros2InfoManager?.RecordTopicBytes(topicName, msg.data.LongLength);
+				}
+
 				lock (messageLock)
 				{
 					pendingMessage = msg;
@@ -385,12 +402,17 @@ namespace Main.Room.SLAMRoom
 				int pointCount = Mathf.Min(simulatedPointCount, maxPoints);
 				EnsureParticleCapacity(pointCount);
 
-				Vector3 halfRoom = simulatedRoomSize * 0.5f;
+				Vector3 halfRoom = simulatedRoomSizeMeters * 0.5f;
 				int renderedCount = 0;
 
 				for (int i = 0; i < pointCount; i++)
 				{
 					Vector3 position = GetSimulatedRoomPoint(i, pointCount, halfRoom, time);
+					if (simulatedUsesCoordinateConversion)
+					{
+						position = ConvertRosPositionToUnity(ConvertUnityPositionToRos(position));
+					}
+
 					Color color = GetSimulatedRoomColor(i, pointCount, position, halfRoom);
 
 					particleBuffer[renderedCount] = new ParticleSystem.Particle
@@ -414,7 +436,7 @@ namespace Main.Room.SLAMRoom
 
 				if (enableDebugLog && receivedCloudCount % Mathf.Max(1, logEveryNFrames) == 0)
 				{
-					Debug.Log($"[ROS2 PointCloud] Simulated rendered={renderedCount}, size={simulatedRoomSize}");
+					Debug.Log($"[ROS2 PointCloud] Simulated rendered={renderedCount}, fullSizeMeters={simulatedRoomSizeMeters}, roomScale={roomScale}");
 				}
 			}
 			catch (Exception ex)
@@ -476,8 +498,12 @@ namespace Main.Room.SLAMRoom
 
 		private Vector3 GetSimulatedObstaclePoint(int index, float u, float v, Vector3 halfRoom)
 		{
-			Vector3 center = new Vector3(halfRoom.x * 0.25f, -halfRoom.y + 0.45f, halfRoom.z * 0.15f);
-			Vector3 halfBox = new Vector3(0.45f, 0.45f, 0.35f);
+			Vector3 halfBox = new Vector3(
+				Mathf.Min(0.45f, halfRoom.x * 0.22f),
+				Mathf.Min(0.45f, halfRoom.y * 0.35f),
+				Mathf.Min(0.35f, halfRoom.z * 0.18f)
+			);
+			Vector3 center = new Vector3(halfRoom.x * 0.25f, -halfRoom.y + halfBox.y, halfRoom.z * 0.15f);
 			int face = index % 5;
 
 			switch (face)
@@ -627,6 +653,19 @@ namespace Main.Room.SLAMRoom
 			}
 		}
 
+		public Vector3 ConvertUnityPositionToRos(Vector3 unityPosition)
+		{
+			switch (frameMode)
+			{
+				case PointCloudFrameMode.RosBaseLinkToUnity:
+					return new Vector3(unityPosition.z, -unityPosition.x, unityPosition.y);
+				case PointCloudFrameMode.RosCameraOpticalToUnity:
+					return new Vector3(unityPosition.x, -unityPosition.y, unityPosition.z);
+				default:
+					return unityPosition;
+			}
+		}
+
 		private Color ReadPointColor(PointCloud2Msg msg, int baseIndex)
 		{
 			if (rgbOffset >= 0)
@@ -723,7 +762,42 @@ namespace Main.Room.SLAMRoom
 				scaleTarget = particleSystemInstance != null ? particleSystemInstance.transform : transform;
 			}
 
-			scaleTarget.localScale = Vector3.one * Mathf.Max(0.0001f, roomScale);
+			float targetScale = Mathf.Max(0.0001f, roomScale);
+			if (!roomScaleIsWorldScale || scaleTarget.parent == null)
+			{
+				scaleTarget.localScale = Vector3.one * targetScale;
+				LogRoomScale(scaleTarget);
+				return;
+			}
+
+			Vector3 parentScale = scaleTarget.parent.lossyScale;
+			scaleTarget.localScale = new Vector3(
+				SafeDivideScale(targetScale, parentScale.x),
+				SafeDivideScale(targetScale, parentScale.y),
+				SafeDivideScale(targetScale, parentScale.z)
+			);
+			LogRoomScale(scaleTarget);
+		}
+
+		private float SafeDivideScale(float targetScale, float parentAxisScale)
+		{
+			if (Mathf.Abs(parentAxisScale) < 0.0001f)
+			{
+				return targetScale;
+			}
+
+			return targetScale / parentAxisScale;
+		}
+
+		private void LogRoomScale(Transform scaleTarget)
+		{
+			if (!enableDebugLog || !Application.isPlaying || Time.unscaledTime - lastScaleDebugLogTime < 3f)
+			{
+				return;
+			}
+
+			lastScaleDebugLogTime = Time.unscaledTime;
+			Debug.Log($"[ROS2 PointCloud] roomScale={roomScale}, localScale={scaleTarget.localScale}, worldScale={scaleTarget.lossyScale}, scaleTarget={scaleTarget.name}");
 		}
 
 		private void OnDisable()

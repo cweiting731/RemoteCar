@@ -35,7 +35,6 @@ namespace StreamVideo
         private float fpsTimer = 0f;
         private int fpsFrameCount = 0;
         private float currentFps = 0f;
-        private long throughputBytes = 0;
         private float currentMbps = 0f;
         private readonly object statsLock = new object();
         private ROSConnection ros;
@@ -70,29 +69,24 @@ namespace StreamVideo
             // 每秒更新一次 FPS
             if (fpsTimer >= 0.5f)
             {
-                long bytesInWindow;
                 lock (statsLock)
                 {
                     currentFps = fpsFrameCount / fpsTimer;
                     fpsFrameCount = 0;
-                    bytesInWindow = throughputBytes;
-                    throughputBytes = 0;
                 }
 
                 // 如果是測試模式，模擬 Mbps 數值；否則根據實際收到的位元組數計算 Mbps
-                if (isTest)                {
+                if (isTest)
+                {
                     currentMbps = Random.Range(5f, 20f); // 模擬 5-20 Mbps 的範圍
                 }
-                else
-                {
-                    currentMbps = bytesInWindow * 8f / fpsTimer / 1_000_000f;
-                }
-                if (ros2Info != null)
+                if (isTest && ros2Info != null)
                 {
                     ros2Info.SetTopicMbps(topicName, currentMbps);
                     ros2Info.UpdateInfo();
                 }
-                else {
+                else if (ros2Info == null)
+                {
                     Debug.LogWarning("[ROS2StreamSubscriber] ROS2InfoManager reference is not assigned.");
                 }
 
@@ -117,7 +111,11 @@ namespace StreamVideo
             lock (statsLock)
             {
                 fpsFrameCount++;
-                throughputBytes += dataLength;
+            }
+
+            if (!isTest)
+            {
+                ros2Info?.RecordTopicBytes(topicName, dataLength);
             }
 
             lock (latestFrameLock)

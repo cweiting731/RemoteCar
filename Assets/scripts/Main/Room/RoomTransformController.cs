@@ -29,9 +29,10 @@ namespace Main.Room
             // 處理移動邏輯
             if (isMoveActive)
             {
-                // 左手控制 XZ 平面 (leftStickX, leftStickY)
-                // 右手控制 Y 軸上下 (rightStickY)
-                Vector3 targetInput = new Vector3(inputGetter.leftStickX, inputGetter.rightStickY, inputGetter.leftStickY);
+                // Left stick controls XZ movement. X/Z are swapped to match the room/map axes.
+                // Right stick Y controls vertical movement.
+                // 移動方向相反修改這裡的符號即可，例如改成 inputGetter.leftStickY 來讓左搖桿前推是正向移動。
+                Vector3 targetInput = new Vector3(-inputGetter.leftStickY, inputGetter.rightStickY, -inputGetter.leftStickX);
                 UpdateMovement(targetInput);
             }
             else
