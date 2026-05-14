@@ -19305,7 +19305,7 @@ MonoBehaviour:
   globalMapRoot: {fileID: 1629732713}
   cameraPoseMarker: {fileID: 0}
   manualPositionOffset: {x: 0, y: 0, z: 0}
-  frameMode: 2
+  frameMode: 1
   applyRotation: 1
   showPath: 1
   pathLineRenderer: {fileID: 0}
@@ -19317,7 +19317,7 @@ MonoBehaviour:
   ros2InfoManager: {fileID: 2000461894}
   enableDebugLog: 1
   logEveryNFrames: 30
-  useSimulatedPose: 1
+  useSimulatedPose: 0
   simulatedRateHz: 20
   simulatedCenter: {x: 0, y: 0, z: 0}
   simulatedSizeMeters: {x: 2.2, y: 1.4}
@@ -29710,7 +29710,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.30265296, y: 0.3026529, z: 0.3026529}
+  m_LocalScale: {x: 0.30265296, y: 0.30265296, z: 0.30265296}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2020351485}
@@ -31546,7 +31546,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.101960786, g: 0.12156863, b: 0.16862746, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -31583,7 +31583,7 @@ MonoBehaviour:
   topicName: /camera/colored
   enableDebugLog: 1
   logEveryNFrames: 30
-  isTest: 1
+  isTest: 0
   ros2Info: {fileID: 2000461894}
 --- !u!1 &1709797318
 GameObject:
@@ -35313,13 +35313,13 @@ MonoBehaviour:
   miniRoomRoot: {fileID: 1629732713}
   roomScale: 0.05
   roomScaleIsWorldScale: 1
-  frameMode: 2
+  frameMode: 1
   manualPositionOffset: {x: 0, y: 0, z: 0}
   enableDebugLog: 1
   logEveryNFrames: 30
   renderIntervalSeconds: 2
   ros2InfoManager: {fileID: 2000461894}
-  useSimulatedPointCloud: 1
+  useSimulatedPointCloud: 0
   simulatedUsesCoordinateConversion: 1
   simulatedPointCount: 12000
   simulatedRoomSizeMeters: {x: 4, y: 4, z: 4}
@@ -40210,7 +40210,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2806941712824896358}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.167, y: -0.096, z: -0.154}
   m_LocalScale: {x: 0.16520573, y: 0.16520573, z: 0.16520573}
   m_ConstrainProportionsScale: 0
@@ -40221,7 +40221,7 @@ Transform:
   - {fileID: 2806941714121597079}
   - {fileID: 3736265826970063591}
   m_Father: {fileID: 555873942}
-  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &2806941712824896355
 MonoBehaviour:
   m_ObjectHideFlags: 0

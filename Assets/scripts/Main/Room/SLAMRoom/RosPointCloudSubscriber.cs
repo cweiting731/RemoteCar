@@ -35,7 +35,8 @@ namespace Main.Room.SLAMRoom
 		public bool roomScaleIsWorldScale = true;
 
 		[Header("Coordinate Conversion")]
-		public PointCloudFrameMode frameMode = PointCloudFrameMode.RosCameraOpticalToUnity;
+		[Tooltip("Use RosBaseLinkToUnity when the ROS2 source frame is x forward, y left, z up.")]
+		public PointCloudFrameMode frameMode = PointCloudFrameMode.RosBaseLinkToUnity;
 		public Vector3 manualPositionOffset = Vector3.zero;
 
 		[Header("Debug")]

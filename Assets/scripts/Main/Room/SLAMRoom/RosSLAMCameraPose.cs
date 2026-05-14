@@ -27,7 +27,8 @@ namespace Main.Room.SLAMRoom
 		public Vector3 manualPositionOffset = Vector3.zero;
 
 		[Header("Coordinate Conversion")]
-		public PoseFrameMode frameMode = PoseFrameMode.RosCameraOpticalToUnity;
+		[Tooltip("Use RosBaseLinkToUnity when the ROS2 source frame is x forward, y left, z up.")]
+		public PoseFrameMode frameMode = PoseFrameMode.RosBaseLinkToUnity;
 		public bool applyRotation = true;
 
 		[Header("Path Display")]
