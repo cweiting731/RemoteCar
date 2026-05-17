@@ -43,6 +43,10 @@ namespace Main.Room.SLAMRoom
 		[Header("Info")]
 		public ROS2InfoManager ros2InfoManager;
 
+		[Header("Pose Loss")]
+		[Tooltip("If no pose is received for this many seconds, clear the old path and restart on the next pose. Set to 0 or less to disable.")]
+		public float poseLostTimeoutSeconds = 1.0f;
+
 		[Header("Debug")]
 		public bool enableDebugLog = true;
 		public int logEveryNFrames = 30;
@@ -62,6 +66,8 @@ namespace Main.Room.SLAMRoom
 		private ROSConnection ros;
 		private int receivedPoseCount;
 		private float simulationTimer;
+		private float lastPoseReceivedTime = float.NegativeInfinity;
+		private bool poseWasLost;
 		private Material runtimePathMaterial;
 
 		public Vector3 LatestMapPosition { get; private set; }
@@ -127,6 +133,8 @@ namespace Main.Room.SLAMRoom
 					UpdateSimulatedPose();
 					return;
 				}
+
+				CheckPoseLoss();
 
 				PoseStampedMsg message = null;
 				lock (messageLock)
@@ -283,9 +291,15 @@ namespace Main.Room.SLAMRoom
 
 		public void ApplyMapPose(Vector3 mapPosition, Quaternion mapRotation, string frameId = "")
 		{
+			if (poseWasLost)
+			{
+				poseWasLost = false;
+			}
+
 			LatestMapPosition = mapPosition + manualPositionOffset;
 			LatestMapRotation = mapRotation;
 			HasPose = true;
+			lastPoseReceivedTime = Time.unscaledTime;
 
 			if (cameraPoseMarker != null)
 			{
@@ -397,6 +411,28 @@ namespace Main.Room.SLAMRoom
 			receivedPoseCount++;
 			ros2InfoManager?.RecordTopicBytes(topicName, 80);
 			ApplyMapPose(position, rotation, "simulated");
+		}
+
+		private void CheckPoseLoss()
+		{
+			if (!HasPose || poseLostTimeoutSeconds <= 0f || poseWasLost)
+			{
+				return;
+			}
+
+			if (Time.unscaledTime - lastPoseReceivedTime < poseLostTimeoutSeconds)
+			{
+				return;
+			}
+
+			poseWasLost = true;
+			HasPose = false;
+			ClearPath();
+
+			if (enableDebugLog)
+			{
+				Debug.Log($"[ROS2 CameraPose] Pose lost. Cleared path after {poseLostTimeoutSeconds:0.##}s without updates.");
+			}
 		}
 
 		public Vector3 ConvertRosPositionToUnity(Vector3 rosPosition)
