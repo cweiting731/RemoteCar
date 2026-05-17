@@ -4,8 +4,6 @@ using UnityEngine;
 
 public class OVRInputGetter : MonoBehaviour
 {
-    public MiniRoomContentBuilder miniRoomContentBuilder;
-
     [Header("Rotate Setting")]
     public float rotateSpeed = 90f;
 

@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace StreamVideo
+namespace Main.UI
 {
     public class UIGrid : Graphic
     {

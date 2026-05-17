@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 
-namespace ROS2
+namespace Main.UI
 {
     /// <summary>
     /// 實時圖表UI組件

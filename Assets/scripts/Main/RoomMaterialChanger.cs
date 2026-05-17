@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+// deprecated
 public class RoomMaterialChanger : MonoBehaviour
 {
     [Header("材質設定")]

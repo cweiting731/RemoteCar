@@ -2,6 +2,7 @@ using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
 using RosMessageTypes.Sensor; // 需要包含 sensor_msgs
 
+// deprecated
 public class RosImageSubscriber : MonoBehaviour
 {
     [Header("ROS2 Settings")]

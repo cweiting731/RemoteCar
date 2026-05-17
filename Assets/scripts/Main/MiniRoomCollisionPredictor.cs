@@ -1,6 +1,7 @@
 using System.Data.Common;
 using UnityEngine;
 
+// deprecated
 [RequireComponent(typeof(LineRenderer))]
 public class MiniRoomRayCollisionPredictor : MonoBehaviour
 {

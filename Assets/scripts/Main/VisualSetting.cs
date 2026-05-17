@@ -1,5 +1,6 @@
 using UnityEngine;
 
+// deprecated
 public class VisualSetting : MonoBehaviour
 {
     // 指定要控制的 Panel 上的 CanvasGroup

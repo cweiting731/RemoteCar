@@ -1,5 +1,6 @@
 using UnityEngine;
 using Oculus.Interaction;
+using Main.Room.MiniRoom;
 
 public class PrefabSpawner : MonoBehaviour
 {

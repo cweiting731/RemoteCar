@@ -10246,7 +10246,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7ded1b14e50ccad409e7d3e497344dbf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  miniRoomContentBuilder: {fileID: 615887495}
   rotateSpeed: 90
   leftStickX: 0
   leftStickY: 0
