@@ -169,5 +169,10 @@ namespace ROS2
             realtimeGraph.AddSample("Transmit", totalInputMbps);
             realtimeGraph.AddSample("Receive", totalOutputMbps);
         }
+
+        public void ReconnectROS2()
+        {
+            Ros2ReconnectHelper.Reconnect(this);
+        }
     }
 }

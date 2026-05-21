@@ -6,4 +6,9 @@ public class ButtonCheck : MonoBehaviour
     {
         Debug.Log("Button Pressed!");
     }
+
+    public void ReconnectROS2()
+    {
+        ROS2.Ros2ReconnectHelper.Reconnect(this);
+    }
 }

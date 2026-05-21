@@ -133,6 +133,11 @@ namespace Main.Room.SLAMRoom
 			}
 		}
 
+		public void ReconnectROS2()
+		{
+			Ros2ReconnectHelper.Reconnect(this);
+		}
+
 		private void Update()
 		{
 			try

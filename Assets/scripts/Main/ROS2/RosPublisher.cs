@@ -26,5 +26,10 @@ namespace ROS2
                 ros.Publish(topicName, msg);
             }
         }
+
+        public void ReconnectROS2()
+        {
+            Ros2ReconnectHelper.Reconnect(this);
+        }
     }
 }

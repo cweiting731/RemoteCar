@@ -76,7 +76,7 @@ namespace CarControl
                 currentSx = ovrInputGetter.leftStickX;
                 currentSy = ovrInputGetter.leftStickY;
 
-                hd = (int)((currentSx + 1f) * 0.5f * 255f);
+                hd = (int)((-currentSx + 1f) * 0.5f * 255f);
                 th = (int)((-currentSy + 1f) * 0.5f * 255f);
                 carVisualizer?.SetInput(currentSx, currentSy);
             }
@@ -85,7 +85,7 @@ namespace CarControl
                 currentSx = ovrInputGetter.rightStickX;
                 currentSy = ovrInputGetter.leftStickY;
 
-                hd = (int)((currentSx + 1f) * 0.5f * 255f);
+                hd = (int)((-currentSx + 1f) * 0.5f * 255f);
                 th = (int)((-currentSy + 1f) * 0.5f * 255f);
                 carVisualizer?.SetInput(currentSx, currentSy);
             }
@@ -120,6 +120,11 @@ namespace CarControl
             {
                 singleHandMode = false;
             }
+        }
+
+        public void ReconnectROS2()
+        {
+            Ros2ReconnectHelper.Reconnect(this);
         }
     }
 }

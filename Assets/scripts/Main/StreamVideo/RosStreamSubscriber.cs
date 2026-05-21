@@ -278,5 +278,10 @@ namespace StreamVideo
                 }
             }
         }
+
+        public void ReconnectROS2()
+        {
+            Ros2ReconnectHelper.Reconnect(this);
+        }
     }
 }

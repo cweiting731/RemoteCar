@@ -97,6 +97,11 @@ public class RosImageSubscriber : MonoBehaviour
     }
 
     // 將 BGR 轉換為 RGB 並上下顛倒的輔助函式
+    public void ReconnectROS2()
+    {
+        ROS2.Ros2ReconnectHelper.Reconnect(this);
+    }
+
     void ConvertBGRtoRGBAndFlip(int width, int height, byte[] bgrData, byte[] rgbData)
     {
         int rowBytes = width * 3;

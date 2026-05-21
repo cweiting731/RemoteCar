@@ -16,5 +16,10 @@ namespace ROS2
         {
             Debug.Log("[ROS2] 收到來自 ROS 的消息: " + msg.data);
         }
+
+        public void ReconnectROS2()
+        {
+            Ros2ReconnectHelper.Reconnect(this);
+        }
     }
 }
