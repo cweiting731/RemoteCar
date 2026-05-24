@@ -7,6 +7,9 @@ namespace Main.Room
         [Header("輸入來源")]
         public OVRInputGetter inputGetter;
 
+        [Header("頭盔 / 相機")]
+        public Transform head;
+
         [Header("狀態開關")]
         public bool isMoveActive = false;
         public bool isRotateActive = false;
@@ -29,10 +32,7 @@ namespace Main.Room
             // 處理移動邏輯
             if (isMoveActive)
             {
-                // Left stick controls XZ movement. X/Z are swapped to match the room/map axes.
-                // Right stick Y controls vertical movement.
-                // 移動方向相反修改這裡的符號即可，例如改成 inputGetter.leftStickY 來讓左搖桿前推是正向移動。
-                Vector3 targetInput = new Vector3(-inputGetter.leftStickY, inputGetter.rightStickY, -inputGetter.leftStickX);
+                Vector3 targetInput = BuildHeadRelativeMoveInput();
                 UpdateMovement(targetInput);
             }
             else
@@ -61,6 +61,43 @@ namespace Main.Room
             Vector3 targetVel = inputVec * moveSpeed;
             // 透過 Lerp 達到速度的緩啟動與緩停效果
             currentMoveVel = Vector3.Lerp(currentMoveVel, targetVel, moveAcceleration * Time.deltaTime);
+        }
+
+        private Vector3 BuildHeadRelativeMoveInput()
+        {
+            Transform referenceHead = GetHeadTransform();
+            if (referenceHead == null)
+            {
+                return new Vector3(-inputGetter.leftStickY, inputGetter.rightStickY, -inputGetter.leftStickX);
+            }
+
+            Vector3 headForward = Vector3.ProjectOnPlane(referenceHead.forward, Vector3.up);
+            Vector3 headRight = Vector3.ProjectOnPlane(referenceHead.right, Vector3.up);
+
+            if (headForward.sqrMagnitude < 0.0001f)
+                headForward = Vector3.forward;
+            else
+                headForward.Normalize();
+
+            if (headRight.sqrMagnitude < 0.0001f)
+                headRight = Vector3.right;
+            else
+                headRight.Normalize();
+
+            Vector3 move = (inputGetter.leftStickY * headForward) + (inputGetter.leftStickX * headRight);
+            move.y = inputGetter.rightStickY;
+            return move;
+        }
+
+        private Transform GetHeadTransform()
+        {
+            if (head != null)
+                return head;
+
+            if (Camera.main != null)
+                return Camera.main.transform;
+
+            return null;
         }
 
         private void UpdateRotation(float horizontalInput)
