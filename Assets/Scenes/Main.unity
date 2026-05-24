@@ -11139,6 +11139,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   inputGetter: {fileID: 598388014}
+  head: {fileID: 1451448456}
   isMoveActive: 0
   isRotateActive: 0
   moveSpeed: 1.5
@@ -30732,6 +30733,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   inputGetter: {fileID: 598388014}
+  head: {fileID: 1451448456}
   isMoveActive: 0
   isRotateActive: 0
   moveSpeed: 1.5
@@ -41926,6 +41928,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   inputGetter: {fileID: 598388014}
+  head: {fileID: 0}
   isMoveActive: 0
   isRotateActive: 0
   moveSpeed: 1.5
