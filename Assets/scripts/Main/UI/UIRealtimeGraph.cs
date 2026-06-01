@@ -201,19 +201,23 @@ namespace Main.UI
             EnsureInitialized();
         }
 
+        #if UNITY_EDITOR
         /// <summary>Unity編輯器中修改屬性時調用</summary>
-        protected override void OnValidate()
+        protected void OnValidate()
         {
-            base.OnValidate();
+            // 關鍵：不要呼叫 base.OnValidate(); 因為打包時父類別沒有這個方法
+            
             // 確保參數有效
             timeWindow = Mathf.Max(0.01f, timeWindow);
             maxSamples = Mathf.Max(2, maxSamples);
             lineThickness = Mathf.Max(0.1f, lineThickness);
+            
             EnsureInitialized();
+            
             // 標記需要重新繪製
             SetVerticesDirty();
         }
-
+        #endif
         /// <summary>為第一個序列添加一個新樣本</summary>
         public void AddSample(float value)
         {

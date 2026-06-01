@@ -1,287 +1,287 @@
 using RosMessageTypes.Sensor;
 using Unity.Robotics.ROSTCPConnector;
-using UnityEngine.UI;
 using UnityEngine;
-using TMPro;
-using ROS2;
+using UnityEngine.UI;
+using System.Threading;
 
 namespace StreamVideo
 {
     public class RosStreamSubscriber : MonoBehaviour
     {
         [Header("ROS2 Settings")]
-        public string topicName = "/camera/colored"; // 或者 "/camera" (灰階)
-
-        [Header("Debug")]
-        public bool enableDebugLog = true;
-        public int logEveryNFrames = 30;
+        public string topicName = "/camera/colored";
+        public bool enableDebugLog = false;
 
         [Header("Info")]
-        public bool isTest = false;
-        public ROS2InfoManager ros2Info;
+        public RawImage rawImage;
+        public ROS2.ROS2InfoManager ros2InfoManager;
 
-        private Texture2D texture; // 補上遺漏的宣告
-        private RawImage rawImage;
-        private bool isTextureInitialized = false;
-        private int receivedImageCount = 0;
-        private byte[] processedImageData; // ▲ 新增: 用來重複使用的資料轉換陣列，避免嚴重 GC 卡頓
-        private byte[] latestRawData;
-        private string latestEncoding;
-        private int latestWidth;
-        private int latestHeight;
-        private readonly object latestFrameLock = new object();
-
-        // FPS 計算及連線資訊相關
-        private float fpsTimer = 0f;
-        private int fpsFrameCount = 0;
-        private float currentFps = 0f;
-        private float currentMbps = 0f;
-        private readonly object statsLock = new object();
         private ROSConnection ros;
 
-        // 只保留最新一張影像，避免高速影像進來時在主執行緒排隊塞爆
-        private bool isNewImageAvailable = false;
-        private bool isProcessing = false; // 避免重入，確保同一時間只處理一張 frame
+        private Texture2D texture;
+        private bool textureReady;
+        private bool isSubscribed;
+        private bool hasStarted;
 
-        void Start()
+        private byte[] bufferA;
+        private byte[] bufferB;
+        private byte[] writeBuffer;
+        private byte[] readBuffer;
+        private byte[] monoRgbBuffer;
+
+        private int width;
+        private int height;
+        private string encoding;
+        private double stampSeconds;
+        private uint stampNanoseconds;
+        private double receiveUnixSeconds = -1.0;
+
+        private int hasNewFrame;
+
+        private void Start()
         {
-            rawImage = GetComponent<RawImage>();
+            hasStarted = true;
+            ros = ROSConnection.GetOrCreateInstance();
+            EnsureFrameBuffers(1);
+            SubscribeNow();
+        }
 
-            if (rawImage == null)
+        private void OnEnable()
+        {
+            if (hasStarted)
             {
-                Debug.LogError("[ROS2 Image] RawImage not found on this GameObject.");
+                SubscribeNow();
+            }
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeNow();
+        }
+
+        private void OnDestroy()
+        {
+            UnsubscribeNow();
+            ReleaseTexture();
+        }
+
+        private void OnImage(ImageMsg msg)
+        {
+            int size = msg.data.Length;
+            ros2InfoManager?.RecordTopicBytes(topicName, msg.data.LongLength);
+
+            EnsureFrameBuffers(size);
+            System.Buffer.BlockCopy(msg.data, 0, writeBuffer, 0, size);
+
+            width = (int)msg.width;
+            height = (int)msg.height;
+            encoding = msg.encoding;
+            stampSeconds = msg.header?.stamp?.sec ?? 0;
+            stampNanoseconds = msg.header?.stamp?.nanosec ?? 0;
+            receiveUnixSeconds = ROS2.ROS2InfoManager.GetCurrentUnixSeconds();
+
+            var tmp = writeBuffer;
+            writeBuffer = readBuffer;
+            readBuffer = tmp;
+
+            Interlocked.Exchange(ref hasNewFrame, 1);
+        }
+
+        private void Update()
+        {
+            if (Interlocked.Exchange(ref hasNewFrame, 0) == 0)
+                return;
+
+            if (readBuffer == null || readBuffer.Length == 0)
+                return;
+
+            if (encoding == "bgr8")
+            {
+                EnsureTexture(width, height);
+                ConvertBGRtoRGBFlip(readBuffer, width, height);
+                texture.LoadRawTextureData(readBuffer);
+            }
+            else if (encoding == "mono8")
+            {
+                EnsureTexture(width, height);
+                EnsureMonoRgbBuffer(width * height * 3);
+                ConvertMonoToRGBFlip(readBuffer, monoRgbBuffer, width, height);
+                texture.LoadRawTextureData(monoRgbBuffer);
+            }
+            else
+            {
+                return;
             }
 
-            // 取得 ROS 連結並訂閱 Topic
-            ros = ROSConnection.GetOrCreateInstance();
-            ros.Subscribe<ImageMsg>(topicName, ReceiveImage);
+            texture.Apply(false, false);
+            ros2InfoManager?.RecordTopicDisplayLatency(topicName, stampSeconds, stampNanoseconds, receiveUnixSeconds);
+        }
+
+        public void ResetROS2Subscriber()
+        {
+            if (ros == null)
+            {
+                ros = ROSConnection.GetOrCreateInstance();
+            }
+
+            Interlocked.Exchange(ref hasNewFrame, 0);
+            UnsubscribeNow();
+            SubscribeNow();
+        }
+
+        private void SubscribeNow()
+        {
+            if (ros == null || isSubscribed || string.IsNullOrEmpty(topicName))
+            {
+                return;
+            }
+
+            ros.Subscribe<ImageMsg>(topicName, OnImage);
+            isSubscribed = true;
 
             if (enableDebugLog)
-            {
-                Debug.Log($"[ROS2 Image] Subscribed to topic: {topicName}");
-            }
-
+                Debug.Log($"Subscribed: {topicName}");
         }
 
-        void Update()
+        private void UnsubscribeNow()
         {
-            fpsTimer += Time.deltaTime;
-            // 每秒更新一次 FPS
-            if (fpsTimer >= 0.5f)
+            if (ros == null || !isSubscribed || string.IsNullOrEmpty(topicName))
             {
-                lock (statsLock)
-                {
-                    currentFps = fpsFrameCount / fpsTimer;
-                    fpsFrameCount = 0;
-                }
-
-                // 如果是測試模式，模擬 Mbps 數值；否則根據實際收到的位元組數計算 Mbps
-                if (isTest)
-                {
-                    currentMbps = Random.Range(5f, 20f); // 模擬 5-20 Mbps 的範圍
-                }
-                if (isTest && ros2Info != null)
-                {
-                    ros2Info.SetTopicMbps(topicName, currentMbps);
-                    ros2Info.UpdateInfo();
-                }
-                else if (ros2Info == null)
-                {
-                    Debug.LogWarning("[ROS2StreamSubscriber] ROS2InfoManager reference is not assigned.");
-                }
-
-                fpsTimer = 0f;
+                return;
             }
 
-            // 每幀最多只啟動一次處理；如果上一張還沒做完，就先等下一輪更新
-            if (isNewImageAvailable && !isProcessing)
+            ros.Unsubscribe(topicName);
+            isSubscribed = false;
+        }
+
+        private void EnsureFrameBuffers(int size)
+        {
+            size = Mathf.Max(1, size);
+
+            if (bufferA == null || bufferA.Length < size)
             {
-                ProcessLatestImageAsync();
-                isNewImageAvailable = false;
+                bufferA = new byte[size];
+            }
+
+            if (bufferB == null || bufferB.Length < size)
+            {
+                bufferB = new byte[size];
+            }
+
+            if (writeBuffer == null || writeBuffer.Length < size)
+            {
+                writeBuffer = bufferA;
+            }
+
+            if (readBuffer == null || readBuffer.Length < size)
+            {
+                readBuffer = bufferB;
             }
         }
 
-
-        void ReceiveImage(ImageMsg msg)
+        private void EnsureMonoRgbBuffer(int size)
         {
-            receivedImageCount++;
-
-            // 在回呼當下先把資料複製出來，避免後續背景處理時碰到訊息物件生命週期問題
-            int dataLength = msg.data != null ? msg.data.Length : 0;
-            lock (statsLock)
+            if (monoRgbBuffer == null || monoRgbBuffer.Length < size)
             {
-                fpsFrameCount++;
-            }
-
-            if (!isTest)
-            {
-                ros2Info?.RecordTopicBytes(topicName, dataLength);
-            }
-
-            lock (latestFrameLock)
-            {
-                if (latestRawData == null || latestRawData.Length != dataLength)
-                {
-                    latestRawData = new byte[dataLength];
-                }
-
-                if (dataLength > 0)
-                {
-                    System.Buffer.BlockCopy(msg.data, 0, latestRawData, 0, dataLength);
-                }
-
-                latestEncoding = msg.encoding;
-                latestWidth = (int)msg.width;
-                latestHeight = (int)msg.height;
-            }
-
-            isNewImageAvailable = true;
-        }
-
-        async void ProcessLatestImageAsync()
-        {
-            isProcessing = true;
-            try
-            {
-                byte[] rawDataSnapshot;
-                string encodingSnapshot;
-                int w;
-                int h;
-
-                // 只在鎖內取快照，實際轉換與貼圖更新放到鎖外，減少阻塞時間
-                lock (latestFrameLock)
-                {
-                    if (latestRawData == null || latestRawData.Length == 0)
-                    {
-                        return;
-                    }
-
-                    rawDataSnapshot = new byte[latestRawData.Length];
-                    System.Buffer.BlockCopy(latestRawData, 0, rawDataSnapshot, 0, latestRawData.Length);
-                    encodingSnapshot = latestEncoding;
-                    w = latestWidth;
-                    h = latestHeight;
-                }
-
-                // 第一次收到畫面，或解析度變了，就重新建立 Texture
-                if (!isTextureInitialized || texture == null || texture.width != w || texture.height != h)
-                {
-                    // bgr8 與 mono8 最後都轉成 RGB24，讓 Unity 端的貼圖格式固定一致
-                    texture = new Texture2D(w, h, TextureFormat.RGB24, false);
-                    if (rawImage != null)
-                    {
-                        rawImage.texture = texture;
-                    }
-                    isTextureInitialized = true;
-
-                    if (enableDebugLog)
-                    {
-                        Debug.Log($"[ROS2 Image] Texture initialized: {w}x{h}, encoding={encodingSnapshot}");
-                    }
-                }
-
-                // 檢查來源資料長度，避免格式不符時把錯誤資料硬塞進貼圖
-                int expectedBytes = encodingSnapshot == "mono8" ? w * h : w * h * 3;
-                if (rawDataSnapshot.Length < expectedBytes)
-                {
-                    if (enableDebugLog)
-                    {
-                        Debug.LogWarning($"[ROS2 Image] Invalid frame bytes. got={rawDataSnapshot.Length}, expected={expectedBytes}, encoding={encodingSnapshot}");
-                    }
-                    return;
-                }
-
-                // 避免每幀產生新的 byte[] 導致 GC 卡頓，確保陣列大小正確並重複使用
-                int outputLength = w * h * 3;
-                if (processedImageData == null || processedImageData.Length != outputLength)
-                {
-                    processedImageData = new byte[outputLength];
-                }
-
-                // 把像素轉換放到背景執行緒，降低主執行緒卡頓
-                await System.Threading.Tasks.Task.Run(() =>
-                {
-                    if (encodingSnapshot == "bgr8")
-                    {
-                        ConvertBGRtoRGBAndFlip(w, h, rawDataSnapshot, processedImageData);
-                    }
-                    else if (encodingSnapshot == "mono8")
-                    {
-                        ConvertMono8ToRGBAndFlip(w, h, rawDataSnapshot, processedImageData);
-                    }
-                });
-
-                if (encodingSnapshot == "bgr8" || encodingSnapshot == "mono8")
-                {
-                    // 回到主執行緒後把轉換結果寫進 Texture
-                    texture.LoadRawTextureData(processedImageData);
-                    texture.Apply();
-                }
-                else
-                {
-                    if (enableDebugLog)
-                    {
-                        Debug.LogWarning($"[ROS2 Image] Unsupported encoding: {encodingSnapshot}");
-                    }
-                }
-
-                if (enableDebugLog && receivedImageCount % Mathf.Max(1, logEveryNFrames) == 0)
-                {
-                    Debug.Log($"[ROS2 Image] Received={receivedImageCount}, size={w}x{h}, encoding={encodingSnapshot}, bytes={rawDataSnapshot.Length}");
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"[ROS2 Image] Process frame failed: {ex.Message}");
-            }
-            finally
-            {
-                isProcessing = false;
+                monoRgbBuffer = new byte[size];
             }
         }
 
-        // 將 BGR 轉成 RGB，同時上下翻轉，對齊 Unity 貼圖座標
-        void ConvertBGRtoRGBAndFlip(int width, int height, byte[] bgrData, byte[] rgbData)
+        private void EnsureTexture(int targetWidth, int targetHeight)
         {
-            int rowBytes = width * 3;
-            for (int y = 0; y < height; y++)
+            if (textureReady && texture != null && texture.width == targetWidth && texture.height == targetHeight)
             {
-                int srcRowStart = y * rowBytes;
-                // Unity 的紋理起點在左下角，所以將資料上下顛倒
-                int dstRowStart = (height - 1 - y) * rowBytes;
-                for (int x = 0; x < width; x++)
+                return;
+            }
+
+            ReleaseTexture();
+            texture = new Texture2D(targetWidth, targetHeight, TextureFormat.RGB24, false)
+            {
+                hideFlags = HideFlags.DontSave
+            };
+
+            if (rawImage != null)
+            {
+                rawImage.texture = texture;
+            }
+
+            textureReady = true;
+        }
+
+        private void ReleaseTexture()
+        {
+            if (rawImage != null && rawImage.texture == texture)
+            {
+                rawImage.texture = null;
+            }
+
+            if (texture != null)
+            {
+                Destroy(texture);
+                texture = null;
+            }
+
+            textureReady = false;
+        }
+
+        private void ConvertBGRtoRGBFlip(byte[] data, int w, int h)
+        {
+            int stride = w * 3;
+
+            for (int y = 0; y < h / 2; y++)
+            {
+                int top = y * stride;
+                int bottom = (h - 1 - y) * stride;
+
+                for (int x = 0; x < stride; x += 3)
                 {
-                    int srcIdx = srcRowStart + x * 3;
-                    int dstIdx = dstRowStart + x * 3;
-                    rgbData[dstIdx] = bgrData[srcIdx + 2]; // R
-                    rgbData[dstIdx + 1] = bgrData[srcIdx + 1]; // G
-                    rgbData[dstIdx + 2] = bgrData[srcIdx];     // B
+                    SwapPixel(data, top + x, bottom + x);
+                }
+            }
+
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * stride;
+                for (int x = 0; x < stride; x += 3)
+                {
+                    byte b = data[row + x];
+                    byte r = data[row + x + 2];
+                    data[row + x] = r;
+                    data[row + x + 2] = b;
                 }
             }
         }
 
-        // mono8 轉成 RGB 三通道，方便直接寫入同一種 TextureFormat
-        void ConvertMono8ToRGBAndFlip(int width, int height, byte[] monoData, byte[] rgbData)
+        private void ConvertMonoToRGBFlip(byte[] monoData, byte[] rgbData, int w, int h)
         {
-            int rowBytes = width;
-            for (int y = 0; y < height; y++)
+            for (int y = 0; y < h; y++)
             {
-                int srcRowStart = y * rowBytes;
-                int dstRowStart = (height - 1 - y) * width * 3;
-                for (int x = 0; x < width; x++)
+                int srcRow = y * w;
+                int dstRow = (h - 1 - y) * w * 3;
+                for (int x = 0; x < w; x++)
                 {
-                    byte gray = monoData[srcRowStart + x];
-                    int dstIdx = dstRowStart + x * 3;
-                    rgbData[dstIdx] = gray;
-                    rgbData[dstIdx + 1] = gray;
-                    rgbData[dstIdx + 2] = gray;
+                    byte g = monoData[srcRow + x];
+                    int dst = dstRow + x * 3;
+                    rgbData[dst] = g;
+                    rgbData[dst + 1] = g;
+                    rgbData[dst + 2] = g;
                 }
             }
         }
 
-        public void ReconnectROS2()
+        private void SwapPixel(byte[] data, int a, int b)
         {
-            Ros2ReconnectHelper.Reconnect(this);
+            byte t0 = data[a];
+            byte t1 = data[a + 1];
+            byte t2 = data[a + 2];
+
+            data[a] = data[b];
+            data[a + 1] = data[b + 1];
+            data[a + 2] = data[b + 2];
+
+            data[b] = t0;
+            data[b + 1] = t1;
+            data[b + 2] = t2;
         }
     }
 }

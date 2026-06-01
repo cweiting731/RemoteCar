@@ -18,6 +18,9 @@ namespace Main.Room.SLAMRoom
 
 		[Header("ROS2 Settings")]
 		public string topicName = "/slam/point_cloud";
+		public bool enableAutoReconnect = true;
+		public float autoReconnectIntervalSeconds = 2f;
+		public float noDataReconnectTimeoutSeconds = 5f;
 
 		[Header("Rendering")]
 		public ParticleSystem targetParticleSystem;
@@ -62,12 +65,16 @@ namespace Main.Room.SLAMRoom
 
 		private readonly object messageLock = new object();
 		private PointCloud2Msg pendingMessage;
+		private double pendingReceiveUnixSeconds = -1.0;
 		private bool hasPendingMessage;
 
 		private ParticleSystem.Particle[] particleBuffer;
 		private ParticleSystem particleSystemInstance;
 		private Material runtimeParticleMaterial;
 		private ROSConnection ros;
+		private float nextReconnectTime = 0f;
+		private float lastDataSeenTime = 0f;
+		private int lastSeenCloudCount = 0;
 		private int receivedCloudCount;
 		private int lastRenderedPointCount;
 		private float lastRenderTime = -9999f;
@@ -121,6 +128,7 @@ namespace Main.Room.SLAMRoom
 
 				ros = ROSConnection.GetOrCreateInstance();
 				ros.Subscribe<PointCloud2Msg>(topicName, ReceivePointCloud);
+				lastDataSeenTime = Time.unscaledTime;
 
 				if (enableDebugLog)
 				{
@@ -135,13 +143,122 @@ namespace Main.Room.SLAMRoom
 
 		public void ReconnectROS2()
 		{
+			Ros2ReconnectHelper.Reconnect(this, 0f);
+			ResetROS2Subscriber();
+		}
+
+		public void ResetROS2Subscriber()
+		{
+			if (useSimulatedPointCloud)
+			{
+				return;
+			}
+
+			EnsureRosConnection();
+			lock (messageLock)
+			{
+				pendingMessage = null;
+				pendingReceiveUnixSeconds = -1.0;
+				hasPendingMessage = false;
+			}
+
+			ClearCloud();
+			ResubscribeNow("manual reset");
+		}
+
+		private void CheckAutoReconnect()
+		{
+			if (!enableAutoReconnect || useSimulatedPointCloud || ros == null)
+			{
+				return;
+			}
+
+			if (receivedCloudCount != lastSeenCloudCount)
+			{
+				lastSeenCloudCount = receivedCloudCount;
+				lastDataSeenTime = Time.unscaledTime;
+			}
+
+			if (ros.HasConnectionError)
+			{
+				ReconnectAndResubscribeIfDue("connection error");
+				return;
+			}
+
+			if (noDataReconnectTimeoutSeconds <= 0f)
+			{
+				return;
+			}
+
+			if (Time.unscaledTime - lastDataSeenTime < noDataReconnectTimeoutSeconds)
+			{
+				return;
+			}
+
+			ResubscribeIfDue($"no data for {noDataReconnectTimeoutSeconds:0.##}s");
+		}
+
+		private void ReconnectAndResubscribeIfDue(string reason)
+		{
+			float currentTime = Time.unscaledTime;
+			if (currentTime < nextReconnectTime)
+			{
+				return;
+			}
+
+			nextReconnectTime = currentTime + Mathf.Max(0.1f, autoReconnectIntervalSeconds);
 			Ros2ReconnectHelper.Reconnect(this);
+			ResubscribeNow(reason);
+			lastDataSeenTime = currentTime;
+		}
+
+		private void ResubscribeIfDue(string reason)
+		{
+			float currentTime = Time.unscaledTime;
+			if (currentTime < nextReconnectTime)
+			{
+				return;
+			}
+
+			nextReconnectTime = currentTime + Mathf.Max(0.1f, autoReconnectIntervalSeconds);
+			ResubscribeNow(reason);
+			lastDataSeenTime = currentTime;
+		}
+
+		private void ResubscribeNow(string reason)
+		{
+			if (ros == null)
+			{
+				return;
+			}
+
+			if (enableDebugLog)
+			{
+				Debug.Log($"[ROS2 PointCloud] Re-subscribing to {topicName} ({reason}).");
+			}
+
+			ros.Unsubscribe(topicName);
+			ros.Subscribe<PointCloud2Msg>(topicName, ReceivePointCloud);
+			lastDataSeenTime = Time.unscaledTime;
+			lastSeenCloudCount = receivedCloudCount;
+		}
+
+		private void EnsureRosConnection()
+		{
+			if (ros == null)
+			{
+				ros = ROSConnection.GetOrCreateInstance();
+			}
 		}
 
 		private void Update()
 		{
 			try
 			{
+				if (enableAutoReconnect)				
+				{
+					CheckAutoReconnect();
+				}
 				ApplyRoomScale();
 
 				float currentTime = Time.unscaledTime;
@@ -158,12 +275,15 @@ namespace Main.Room.SLAMRoom
 				}
 
 				PointCloud2Msg message = null;
+				double receiveUnixSeconds = -1.0;
 				lock (messageLock)
 				{
 					if (hasPendingMessage)
 					{
 						message = pendingMessage;
+						receiveUnixSeconds = pendingReceiveUnixSeconds;
 						pendingMessage = null;
+						pendingReceiveUnixSeconds = -1.0;
 						hasPendingMessage = false;
 					}
 				}
@@ -171,7 +291,7 @@ namespace Main.Room.SLAMRoom
 				if (message != null)
 				{
 					lastRenderTime = currentTime;
-					RenderPointCloud(message);
+					RenderPointCloud(message, receiveUnixSeconds);
 				}
 			}
 			catch (Exception ex)
@@ -287,6 +407,7 @@ namespace Main.Room.SLAMRoom
 				lock (messageLock)
 				{
 					pendingMessage = msg;
+					pendingReceiveUnixSeconds = ROS2InfoManager.GetCurrentUnixSeconds();
 					hasPendingMessage = true;
 				}
 			}
@@ -303,7 +424,7 @@ namespace Main.Room.SLAMRoom
 			}
 		}
 
-		private void RenderPointCloud(PointCloud2Msg msg)
+		private void RenderPointCloud(PointCloud2Msg msg, double receiveUnixSeconds)
 		{
 			try
 			{
@@ -382,6 +503,7 @@ namespace Main.Room.SLAMRoom
 				particleSystemInstance.SetParticles(particleBuffer, renderedCount);
 				particleSystemInstance.Play();
 				lastRenderedPointCount = renderedCount;
+				ros2InfoManager?.RecordTopicDisplayLatency(topicName, msg.header, receiveUnixSeconds);
 
 				if (enableDebugLog && receivedCloudCount % Mathf.Max(1, logEveryNFrames) == 0)
 				{

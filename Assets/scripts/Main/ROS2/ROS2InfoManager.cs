@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using TMPro;
+using RosMessageTypes.Std;
 using Unity.Robotics.ROSTCPConnector;
 using UnityEngine;
 using Main.UI;
@@ -14,6 +15,7 @@ namespace ROS2
             public string topicName;
             public bool isTransport; // true = Transmit(to ROS2), false = Receive(from ROS2)
             private float Mbps;
+            private float displayLatencyMs = -1f;
 
             public float GetMbps()
             {
@@ -23,6 +25,16 @@ namespace ROS2
             public void SetMbps(float mbps)
             {
                 Mbps = mbps;
+            }
+
+            public float GetDisplayLatencyMs()
+            {
+                return displayLatencyMs;
+            }
+
+            public void SetDisplayLatencyMs(float latencyMs)
+            {
+                displayLatencyMs = latencyMs;
             }
         }
 
@@ -35,6 +47,7 @@ namespace ROS2
         private readonly Dictionary<string, long> throughputBytesByTopic = new Dictionary<string, long>();
         private ROSConnection ros;
         private float infoTimer = 0f;
+        private const double MinimumPlausibleUnixSeconds = 946684800.0; // 2000-01-01 UTC
 
         private void Start()
         {
@@ -73,6 +86,11 @@ namespace ROS2
                     }
                     // Debug.Log($"[ROS2InfoManager] Topic: {ros2.topicName}, {(ros2.isTransport ? "Transmit" : "Receive")}: {ros2.GetMbps()} Mbps");
                     info += $"{ros2.topicName}\n  {(ros2.isTransport ? "Transmit" : "Receive")}: {ros2.GetMbps():F3} Mbps\n";
+                    if (!ros2.isTransport)
+                    {
+                        float latencyMs = ros2.GetDisplayLatencyMs();
+                        info += latencyMs >= 0f ? $"  Display Latency: {latencyMs:F1} ms\n" : "  Display Latency: -- ms\n";
+                    }
                 }
             }
 
@@ -98,6 +116,90 @@ namespace ROS2
                 if (ros2 != null && ros2.topicName == topicName)
                 {
                     ros2.SetMbps(mbps);
+                    break;
+                }
+            }
+        }
+
+        public void RecordTopicDisplayLatency(string topicName, HeaderMsg header)
+        {
+            RecordTopicDisplayLatency(topicName, header, -1.0);
+        }
+
+        public void RecordTopicDisplayLatency(string topicName, HeaderMsg header, double fallbackReceiveUnixSeconds)
+        {
+            if (header?.stamp == null)
+            {
+                RecordReceiveToDisplayLatency(topicName, fallbackReceiveUnixSeconds);
+                return;
+            }
+
+            RecordTopicDisplayLatency(topicName, header.stamp.sec, header.stamp.nanosec, fallbackReceiveUnixSeconds);
+        }
+
+        public void RecordTopicDisplayLatency(string topicName, double stampSeconds, double stampNanoseconds)
+        {
+            RecordTopicDisplayLatency(topicName, stampSeconds, stampNanoseconds, -1.0);
+        }
+
+        public void RecordTopicDisplayLatency(string topicName, double stampSeconds, double stampNanoseconds, double fallbackReceiveUnixSeconds)
+        {
+            if (string.IsNullOrEmpty(topicName))
+            {
+                return;
+            }
+
+            double nowUnixSeconds = GetCurrentUnixSeconds();
+            double sentUnixSeconds = stampSeconds + stampNanoseconds * 1e-9;
+            if (!IsPlausibleUnixStamp(sentUnixSeconds, nowUnixSeconds))
+            {
+                RecordReceiveToDisplayLatency(topicName, fallbackReceiveUnixSeconds, nowUnixSeconds);
+                return;
+            }
+
+            float latencyMs = (float)((nowUnixSeconds - sentUnixSeconds) * 1000.0);
+            SetTopicDisplayLatency(topicName, latencyMs);
+        }
+
+        public static double GetCurrentUnixSeconds()
+        {
+            return (System.DateTime.UtcNow - new System.DateTime(1970, 1, 1, 0, 0, 0, System.DateTimeKind.Utc)).TotalSeconds;
+        }
+
+        private static bool IsPlausibleUnixStamp(double stampUnixSeconds, double nowUnixSeconds)
+        {
+            return stampUnixSeconds >= MinimumPlausibleUnixSeconds && stampUnixSeconds <= nowUnixSeconds + 60.0;
+        }
+
+        private void RecordReceiveToDisplayLatency(string topicName, double receiveUnixSeconds)
+        {
+            RecordReceiveToDisplayLatency(topicName, receiveUnixSeconds, GetCurrentUnixSeconds());
+        }
+
+        private void RecordReceiveToDisplayLatency(string topicName, double receiveUnixSeconds, double nowUnixSeconds)
+        {
+            if (receiveUnixSeconds <= 0.0)
+            {
+                SetTopicDisplayLatency(topicName, -1f);
+                return;
+            }
+
+            float latencyMs = (float)((nowUnixSeconds - receiveUnixSeconds) * 1000.0);
+            SetTopicDisplayLatency(topicName, Mathf.Max(0f, latencyMs));
+        }
+
+        public void SetTopicDisplayLatency(string topicName, float latencyMs)
+        {
+            if (ros2Info == null)
+            {
+                return;
+            }
+
+            foreach (var ros2 in ros2Info)
+            {
+                if (ros2 != null && ros2.topicName == topicName)
+                {
+                    ros2.SetDisplayLatencyMs(latencyMs);
                     break;
                 }
             }

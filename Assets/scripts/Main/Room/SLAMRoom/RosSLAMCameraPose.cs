@@ -18,6 +18,9 @@ namespace Main.Room.SLAMRoom
 
 		[Header("ROS2 Settings")]
 		public string topicName = "/slam/camera_pose";
+		public bool enableAutoReconnect = true;
+		public float autoReconnectIntervalSeconds = 2f;
+		public float noDataReconnectTimeoutSeconds = 3f;
 
 		[Header("Map Integration")]
 		[Tooltip("Root of the global/mini map. Use the same root as RosPointCloudSubscriber.miniRoomRoot.")]
@@ -61,9 +64,14 @@ namespace Main.Room.SLAMRoom
 
 		private readonly object messageLock = new object();
 		private readonly List<Vector3> pathPoints = new List<Vector3>();
+		private Vector3[] pathPointBuffer;
 		private PoseStampedMsg pendingMessage;
+		private double pendingReceiveUnixSeconds = -1.0;
 		private bool hasPendingMessage;
 		private ROSConnection ros;
+		private float nextReconnectTime = 0f;
+		private float lastDataSeenTime = 0f;
+		private int lastSeenPoseCount = 0;
 		private int receivedPoseCount;
 		private float simulationTimer;
 		private float lastPoseReceivedTime = float.NegativeInfinity;
@@ -112,6 +120,7 @@ namespace Main.Room.SLAMRoom
 
 				ros = ROSConnection.GetOrCreateInstance();
 				ros.Subscribe<PoseStampedMsg>(topicName, ReceiveCameraPose);
+				lastDataSeenTime = Time.unscaledTime;
 
 				if (enableDebugLog)
 				{
@@ -126,13 +135,125 @@ namespace Main.Room.SLAMRoom
 
 		public void ReconnectROS2()
 		{
+			Ros2ReconnectHelper.Reconnect(this, 0f);
+			ResetROS2Subscriber();
+		}
+
+		public void ResetROS2Subscriber()
+		{
+			if (useSimulatedPose)
+			{
+				return;
+			}
+
+			EnsureRosConnection();
+			lock (messageLock)
+			{
+				pendingMessage = null;
+				pendingReceiveUnixSeconds = -1.0;
+				hasPendingMessage = false;
+			}
+
+			HasPose = false;
+			poseWasLost = false;
+			ClearPath();
+			ResubscribeNow("manual reset");
+		}
+
+		private void CheckAutoReconnect()
+		{
+			if (!enableAutoReconnect || useSimulatedPose || ros == null)
+			{
+				return;
+			}
+
+			if (receivedPoseCount != lastSeenPoseCount)
+			{
+				lastSeenPoseCount = receivedPoseCount;
+				lastDataSeenTime = Time.unscaledTime;
+			}
+
+			if (ros.HasConnectionError)
+			{
+				ReconnectAndResubscribeIfDue("connection error");
+				return;
+			}
+
+			if (noDataReconnectTimeoutSeconds <= 0f)
+			{
+				return;
+			}
+
+			if (Time.unscaledTime - lastDataSeenTime < noDataReconnectTimeoutSeconds)
+			{
+				return;
+			}
+
+			ResubscribeIfDue($"no data for {noDataReconnectTimeoutSeconds:0.##}s");
+		}
+
+		private void ReconnectAndResubscribeIfDue(string reason)
+		{
+			float currentTime = Time.unscaledTime;
+			if (currentTime < nextReconnectTime)
+			{
+				return;
+			}
+
+			nextReconnectTime = currentTime + Mathf.Max(0.1f, autoReconnectIntervalSeconds);
 			Ros2ReconnectHelper.Reconnect(this);
+			ResubscribeNow(reason);
+			lastDataSeenTime = currentTime;
+		}
+
+		private void ResubscribeIfDue(string reason)
+		{
+			float currentTime = Time.unscaledTime;
+			if (currentTime < nextReconnectTime)
+			{
+				return;
+			}
+
+			nextReconnectTime = currentTime + Mathf.Max(0.1f, autoReconnectIntervalSeconds);
+			ResubscribeNow(reason);
+			lastDataSeenTime = currentTime;
+		}
+
+		private void ResubscribeNow(string reason)
+		{
+			if (ros == null)
+			{
+				return;
+			}
+
+			if (enableDebugLog)
+			{
+				Debug.Log($"[ROS2 CameraPose] Re-subscribing to {topicName} ({reason}).");
+			}
+
+			ros.Unsubscribe(topicName);
+			ros.Subscribe<PoseStampedMsg>(topicName, ReceiveCameraPose);
+			lastDataSeenTime = Time.unscaledTime;
+			lastSeenPoseCount = receivedPoseCount;
+		}
+
+		private void EnsureRosConnection()
+		{
+			if (ros == null)
+			{
+				ros = ROSConnection.GetOrCreateInstance();
+			}
 		}
 
 		private void Update()
 		{
 			try
 			{
+				if (enableAutoReconnect)
+				{
+					CheckAutoReconnect();
+				}
+
 				if (useSimulatedPose)
 				{
 					UpdateSimulatedPose();
@@ -142,19 +263,22 @@ namespace Main.Room.SLAMRoom
 				CheckPoseLoss();
 
 				PoseStampedMsg message = null;
+				double receiveUnixSeconds = -1.0;
 				lock (messageLock)
 				{
 					if (hasPendingMessage)
 					{
 						message = pendingMessage;
+						receiveUnixSeconds = pendingReceiveUnixSeconds;
 						pendingMessage = null;
+						pendingReceiveUnixSeconds = -1.0;
 						hasPendingMessage = false;
 					}
 				}
 
 				if (message != null)
 				{
-					ApplyPoseMessage(message);
+					ApplyPoseMessage(message, receiveUnixSeconds);
 				}
 			}
 			catch (Exception ex)
@@ -256,6 +380,7 @@ namespace Main.Room.SLAMRoom
 				lock (messageLock)
 				{
 					pendingMessage = msg;
+					pendingReceiveUnixSeconds = ROS2InfoManager.GetCurrentUnixSeconds();
 					hasPendingMessage = true;
 				}
 			}
@@ -272,7 +397,7 @@ namespace Main.Room.SLAMRoom
 			}
 		}
 
-		private void ApplyPoseMessage(PoseStampedMsg msg)
+		private void ApplyPoseMessage(PoseStampedMsg msg, double receiveUnixSeconds = -1.0)
 		{
 			if (msg?.pose?.position == null || msg.pose.orientation == null)
 			{
@@ -292,6 +417,7 @@ namespace Main.Room.SLAMRoom
 			);
 
 			ApplyMapPose(ConvertRosPositionToUnity(rosPosition), ConvertRosRotationToUnity(rosRotation), msg.header?.frame_id);
+			ros2InfoManager?.RecordTopicDisplayLatency(topicName, msg.header, receiveUnixSeconds);
 		}
 
 		public void ApplyMapPose(Vector3 mapPosition, Quaternion mapRotation, string frameId = "")
@@ -361,7 +487,7 @@ namespace Main.Room.SLAMRoom
 			msg.pose.orientation = new RosMessageTypes.Geometry.QuaternionMsg(0.0, 0.0, 0.0, 1.0);
 
 			ReceiveCameraPose(msg);
-			ApplyPoseMessage(msg);
+			ApplyPoseMessage(msg, ROS2InfoManager.GetCurrentUnixSeconds());
 		}
 
 		private void AddPathPoint(Vector3 mapPosition)
@@ -383,7 +509,21 @@ namespace Main.Room.SLAMRoom
 			}
 
 			pathLineRenderer.positionCount = pathPoints.Count;
-			pathLineRenderer.SetPositions(pathPoints.ToArray());
+			EnsurePathPointBuffer(pathPoints.Count);
+			for (int i = 0; i < pathPoints.Count; i++)
+			{
+				pathPointBuffer[i] = pathPoints[i];
+			}
+
+			pathLineRenderer.SetPositions(pathPointBuffer);
+		}
+
+		private void EnsurePathPointBuffer(int requiredCount)
+		{
+			if (pathPointBuffer == null || pathPointBuffer.Length < requiredCount)
+			{
+				pathPointBuffer = new Vector3[Mathf.Max(requiredCount, 16)];
+			}
 		}
 
 		private void UpdateSimulatedPose()
@@ -503,6 +643,11 @@ namespace Main.Room.SLAMRoom
 
 		private void OnDestroy()
 		{
+			if (ros != null && !useSimulatedPose && !string.IsNullOrEmpty(topicName))
+			{
+				ros.Unsubscribe(topicName);
+			}
+
 			if (runtimePathMaterial != null)
 			{
 				Destroy(runtimePathMaterial);

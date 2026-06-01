@@ -11,11 +11,58 @@ namespace ROS2
 
         public static bool IsReconnecting => isReconnecting;
 
-        public static void Reconnect(MonoBehaviour runner, float delaySeconds = DefaultReconnectDelaySeconds)
+        public static void AutoReconnectIfNeeded(
+            MonoBehaviour runner,
+            ROSConnection ros,
+            ref float nextReconnectTime,
+            float reconnectIntervalSeconds,
+            string sourceLabel = null)
+        {
+            if (ros == null || !ros.HasConnectionError)
+            {
+                return;
+            }
+
+            ReconnectIfDue(runner, ref nextReconnectTime, reconnectIntervalSeconds, sourceLabel, "connection error");
+        }
+
+        public static void ReconnectIfDue(
+            MonoBehaviour runner,
+            ref float nextReconnectTime,
+            float reconnectIntervalSeconds,
+            string sourceLabel = null,
+            string reason = null)
+        {
+            float currentTime = Time.unscaledTime;
+            if (currentTime < nextReconnectTime)
+            {
+                return;
+            }
+
+            nextReconnectTime = currentTime + Mathf.Max(0.1f, reconnectIntervalSeconds);
+
+            if (isReconnecting)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(sourceLabel))
+            {
+                string reasonText = string.IsNullOrEmpty(reason) ? string.Empty : $" ({reason})";
+                Debug.Log($"[ROS2] Auto reconnect requested by {sourceLabel}{reasonText}.");
+            }
+
+            Reconnect(runner);
+        }
+
+        public static void Reconnect(
+            MonoBehaviour runner,
+            float delaySeconds = DefaultReconnectDelaySeconds,
+            bool forceDisconnect = false)
         {
             if (runner == null)
             {
-                ReconnectNow();
+                ReconnectNow(forceDisconnect);
                 return;
             }
 
@@ -25,33 +72,45 @@ namespace ROS2
                 return;
             }
 
-            runner.StartCoroutine(ReconnectCoroutine(Mathf.Max(0f, delaySeconds)));
+            runner.StartCoroutine(ReconnectCoroutine(Mathf.Max(0f, delaySeconds), forceDisconnect));
         }
 
-        public static void ReconnectNow()
+        public static void ReconnectNow(bool forceDisconnect = false)
         {
             ROSConnection ros = ROSConnection.GetOrCreateInstance();
-            ros.Disconnect();
-            ros.Connect();
-            Debug.Log($"[ROS2] Reconnected to {ros.RosIPAddress}:{ros.RosPort}");
-        }
-
-        private static IEnumerator ReconnectCoroutine(float delaySeconds)
-        {
-            isReconnecting = true;
-
-            ROSConnection ros = ROSConnection.GetOrCreateInstance();
-            ros.Disconnect();
-
-            if (delaySeconds > 0f)
+            if (forceDisconnect)
             {
-                yield return new WaitForSecondsRealtime(delaySeconds);
+                ros.Disconnect();
             }
 
             ros.Connect();
-            Debug.Log($"[ROS2] Reconnected to {ros.RosIPAddress}:{ros.RosPort}");
+            Debug.Log($"[ROS2] Connect requested to {ros.RosIPAddress}:{ros.RosPort}");
+        }
 
-            isReconnecting = false;
+        private static IEnumerator ReconnectCoroutine(float delaySeconds, bool forceDisconnect)
+        {
+            isReconnecting = true;
+
+            try
+            {
+                ROSConnection ros = ROSConnection.GetOrCreateInstance();
+                if (forceDisconnect)
+                {
+                    ros.Disconnect();
+                }
+
+                if (delaySeconds > 0f)
+                {
+                    yield return new WaitForSecondsRealtime(delaySeconds);
+                }
+
+                ros.Connect();
+                Debug.Log($"[ROS2] Connect requested to {ros.RosIPAddress}:{ros.RosPort}");
+            }
+            finally
+            {
+                isReconnecting = false;
+            }
         }
     }
 }
