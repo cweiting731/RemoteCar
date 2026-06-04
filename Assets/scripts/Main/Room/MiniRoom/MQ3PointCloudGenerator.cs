@@ -61,20 +61,12 @@ public class MiniRoomGenerator : MonoBehaviour
             miniRoot = null;
         }
 
-        GameObject root = new GameObject("Mini_GLOBAL_MESHes");
-        miniRoot = root.transform;
-        miniRoot.SetParent(transform, false);
-        miniRoot.localScale = Vector3.one * Mathf.Max(0.0001f, miniScale);
-
-        int builtCount = 0;
-        int skippedCount = 0;
-
+        List<(Transform roomRoot, MeshFilter meshFilter, MeshRenderer meshRenderer)> roomMeshes = new();
         foreach (Transform roomRoot in roomRoots)
         {
             GameObject globalMeshObj = FindGlobalMeshObject(roomRoot);
             if (globalMeshObj == null)
             {
-                skippedCount++;
                 continue;
             }
 
@@ -82,32 +74,66 @@ public class MiniRoomGenerator : MonoBehaviour
             MeshRenderer srcMr = globalMeshObj.GetComponent<MeshRenderer>();
             if (srcMf == null || srcMf.sharedMesh == null)
             {
-                skippedCount++;
                 continue;
             }
 
-            if (CreateMiniRoomMesh(roomRoot, srcMf, srcMr))
+            roomMeshes.Add((roomRoot, srcMf, srcMr));
+        }
+
+        if (roomMeshes.Count == 0)
+        {
+            Debug.LogError("找不到任何可用的 GLOBAL_MESH。\n");
+            return;
+        }
+
+        Transform refRoom = roomRoots[0];
+        List<Renderer> allRenderers = new();
+        foreach (Transform roomRoot in roomRoots)
+        {
+            allRenderers.AddRange(roomRoot.GetComponentsInChildren<Renderer>(true));
+        }
+
+        if (allRenderers.Count == 0)
+        {
+            Debug.LogError("找不到任何可用的 Renderer，無法計算 MiniRoom 中心。\n");
+            return;
+        }
+
+        Bounds combinedBounds = allRenderers[0].bounds;
+        for (int i = 1; i < allRenderers.Count; i++)
+        {
+            combinedBounds.Encapsulate(allRenderers[i].bounds);
+        }
+
+        Vector3 combinedCenterWorld = combinedBounds.center;
+        Vector3 combinedCenterLocal = refRoom.InverseTransformPoint(combinedCenterWorld);
+
+        GameObject root = new GameObject("Mini_GLOBAL_MESHes");
+        miniRoot = root.transform;
+        miniRoot.SetParent(transform, false);
+        miniRoot.localScale = Vector3.one * Mathf.Max(0.0001f, miniScale);
+
+        int builtCount = 0;
+        foreach (var roomMesh in roomMeshes)
+        {
+            if (CreateMiniRoomMesh(refRoom, combinedCenterLocal, roomMesh.roomRoot, roomMesh.meshFilter, roomMesh.meshRenderer))
             {
                 builtCount++;
             }
-            else
-            {
-                skippedCount++;
-            }
         }
 
-        Debug.Log($"[MiniRoom] 已生成 GLOBAL_MESH 迷你房間，共建立 {builtCount} 個房間，略過 {skippedCount} 個。");
+        Debug.Log($"[MiniRoom] 已生成 GLOBAL_MESH 迷你房間，共建立 {builtCount} 個房間。");
     }
 
-    private bool CreateMiniRoomMesh(Transform roomRoot, MeshFilter srcMf, MeshRenderer srcMr)
+    private bool CreateMiniRoomMesh(Transform refRoom, Vector3 combinedCenterLocal, Transform roomRoot, MeshFilter srcMf, MeshRenderer srcMr)
     {
         GameObject roomGo = new GameObject($"Mini_{roomRoot.name}_GLOBAL_MESH");
         roomGo.transform.SetParent(miniRoot, false);
 
-        Vector3 localPos = roomRoot.InverseTransformPoint(srcMf.transform.position);
-        Quaternion localRot = Quaternion.Inverse(roomRoot.rotation) * srcMf.transform.rotation;
+        Vector3 localPos = refRoom.InverseTransformPoint(srcMf.transform.position);
+        Quaternion localRot = Quaternion.Inverse(refRoom.rotation) * srcMf.transform.rotation;
 
-        roomGo.transform.localPosition = localPos;
+        roomGo.transform.localPosition = localPos - combinedCenterLocal;
         roomGo.transform.localRotation = localRot;
         roomGo.transform.localScale = srcMf.transform.lossyScale;
 

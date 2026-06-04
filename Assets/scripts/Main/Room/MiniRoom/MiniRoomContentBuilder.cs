@@ -32,6 +32,14 @@ namespace Main.Room.MiniRoom
         public bool useOverrideMaterial = false;
         public Material overrideMaterial;
 
+        [Header("MQ3 / Global Mesh")]
+        public bool includeGlobalMesh = true;
+        public Material globalMeshMaterial;
+        [Range(0f, 1f)]
+        public float globalMeshAlpha = 0.35f;
+        public Color globalMeshTintColor = Color.cyan;
+        public bool addGlobalMeshCollider = true;
+
         [Header("Label")]
         public GameObject labelPrefab;
         public Vector3 labelOffset = new Vector3(0f, 2f, 0f);
@@ -52,6 +60,7 @@ namespace Main.Room.MiniRoom
         private readonly List<Transform> _roomRoots = new();
         private Transform _contentRoot;
         private bool _placed;
+        private Material _runtimeGlobalMeshMaterial;
 
         private IEnumerator Start()
         {
@@ -174,6 +183,8 @@ namespace Main.Room.MiniRoom
             if (_contentRoot != null)
                 Destroy(_contentRoot.gameObject);
 
+            DestroyRuntimeGlobalMeshMaterial();
+
             _contentRoot = new GameObject("MiniRoomContent").transform;
             _contentRoot.SetParent(transform, false);
             // 所有 mini 內容都掛在 contentRoot，方便整體刪除與重建
@@ -196,12 +207,12 @@ namespace Main.Room.MiniRoom
                 combinedBounds.Encapsulate(allRenderers[i].bounds);
 
             Vector3 combinedCenterWorld = combinedBounds.center;
-            _roomCenterLocal = combinedCenterWorld;
 
             // 以第一個 room 作為共同參考座標，讓多個 room 可對齊在同一 mini 空間
             Transform refRoom = _roomRoots[0];
             Vector3 combinedCenterLocal =
                 refRoom.InverseTransformPoint(combinedCenterWorld);
+            _roomCenterLocal = combinedCenterLocal;
 
             // ===== Clone meshes =====
             foreach (var room in _roomRoots)
@@ -266,7 +277,199 @@ namespace Main.Room.MiniRoom
                 }
             }
 
+            BuildGlobalMeshes(refRoom, combinedCenterLocal);
             SpawnPlayerMarker(combinedCenterLocal);
+        }
+
+        private void BuildGlobalMeshes(Transform refRoom, Vector3 combinedCenterLocal)
+        {
+            if (!includeGlobalMesh || refRoom == null || _contentRoot == null)
+            {
+                return;
+            }
+
+            Transform globalMeshRoot = new GameObject("MiniRoomGlobalMeshes").transform;
+            globalMeshRoot.SetParent(_contentRoot, false);
+
+            int builtCount = 0;
+            foreach (Transform roomRoot in _roomRoots)
+            {
+                GameObject globalMeshObject = FindGlobalMeshObject(roomRoot);
+                if (globalMeshObject == null)
+                {
+                    continue;
+                }
+
+                MeshFilter srcMf = globalMeshObject.GetComponent<MeshFilter>();
+                MeshRenderer srcMr = globalMeshObject.GetComponent<MeshRenderer>();
+                if (srcMf == null || srcMf.sharedMesh == null || srcMf.sharedMesh.vertexCount == 0 || srcMr == null)
+                {
+                    continue;
+                }
+
+                if (CreateGlobalMesh(refRoom, combinedCenterLocal, globalMeshRoot, roomRoot, srcMf, srcMr))
+                {
+                    builtCount++;
+                }
+            }
+
+            if (builtCount == 0)
+            {
+                Destroy(globalMeshRoot.gameObject);
+            }
+        }
+
+        private bool CreateGlobalMesh(
+            Transform refRoom,
+            Vector3 combinedCenterLocal,
+            Transform parent,
+            Transform roomRoot,
+            MeshFilter srcMf,
+            MeshRenderer srcMr)
+        {
+            GameObject go = new GameObject($"Mini_GlobalMesh_{roomRoot.name}");
+            go.transform.SetParent(parent, false);
+
+            Vector3 localPos = refRoom.InverseTransformPoint(srcMf.transform.position);
+            Quaternion localRot = Quaternion.Inverse(refRoom.rotation) * srcMf.transform.rotation;
+
+            go.transform.localPosition = localPos - combinedCenterLocal;
+            go.transform.localRotation = localRot;
+            go.transform.localScale = srcMf.transform.lossyScale;
+
+            Mesh meshCopy = Instantiate(srcMf.sharedMesh);
+            go.AddComponent<MeshFilter>().sharedMesh = meshCopy;
+
+            MeshRenderer mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = ResolveGlobalMeshMaterial(srcMr);
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+
+            if (addGlobalMeshCollider)
+            {
+                MeshCollider mc = go.AddComponent<MeshCollider>();
+                mc.sharedMesh = meshCopy;
+            }
+
+            int miniRoomLayer = LayerMask.NameToLayer("MiniRoomEnvironment");
+            if (miniRoomLayer >= 0)
+            {
+                go.layer = miniRoomLayer;
+            }
+
+            return true;
+        }
+
+        private GameObject FindGlobalMeshObject(Transform roomRoot)
+        {
+            if (roomRoot == null)
+            {
+                return null;
+            }
+
+            MeshFilter[] meshFilters = roomRoot.GetComponentsInChildren<MeshFilter>(true);
+            foreach (MeshFilter filter in meshFilters)
+            {
+                if (filter == null)
+                {
+                    continue;
+                }
+
+                string objectName = filter.gameObject.name;
+                if (objectName.IndexOf("GLOBAL_MESH", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    objectName.IndexOf("GlobalMesh", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return filter.gameObject;
+                }
+            }
+
+            return null;
+        }
+
+        private Material ResolveGlobalMeshMaterial(MeshRenderer srcMr)
+        {
+            if (_runtimeGlobalMeshMaterial != null)
+            {
+                return _runtimeGlobalMeshMaterial;
+            }
+
+            if (globalMeshMaterial != null)
+            {
+                _runtimeGlobalMeshMaterial = new Material(globalMeshMaterial);
+            }
+            else if (srcMr != null && srcMr.sharedMaterial != null)
+            {
+                _runtimeGlobalMeshMaterial = new Material(srcMr.sharedMaterial);
+            }
+            else
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null)
+                {
+                    shader = Shader.Find("Standard");
+                }
+
+                if (shader == null)
+                {
+                    shader = Shader.Find("Sprites/Default");
+                }
+
+                if (shader == null)
+                {
+                    Debug.LogError("[MiniRoomContentBuilder] No shader found for GLOBAL_MESH material.");
+                    return null;
+                }
+
+                _runtimeGlobalMeshMaterial = new Material(shader);
+            }
+
+            _runtimeGlobalMeshMaterial.name = "MiniRoom_GlobalMesh_Material";
+            ApplyGlobalMeshMaterialSettings(_runtimeGlobalMeshMaterial);
+            return _runtimeGlobalMeshMaterial;
+        }
+
+        private void ApplyGlobalMeshMaterialSettings(Material material)
+        {
+            if (material == null)
+            {
+                return;
+            }
+
+            if (material.HasProperty("_Surface"))
+            {
+                material.SetFloat("_Surface", 1f);
+                material.SetFloat("_Blend", 0f);
+                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                material.SetInt("_ZWrite", 0);
+                material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            }
+
+            if (material.HasProperty("_Mode"))
+            {
+                material.SetFloat("_Mode", 3f);
+                material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                material.SetInt("_ZWrite", 0);
+                material.DisableKeyword("_ALPHATEST_ON");
+                material.EnableKeyword("_ALPHABLEND_ON");
+                material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            }
+
+            Color tint = globalMeshTintColor;
+            tint.a = Mathf.Clamp01(globalMeshAlpha);
+
+            if (material.HasProperty("_BaseColor"))
+            {
+                material.SetColor("_BaseColor", tint);
+            }
+
+            if (material.HasProperty("_Color"))
+            {
+                material.SetColor("_Color", tint);
+            }
         }
 
         private void UpdateRootBoxCollider()
@@ -390,6 +593,22 @@ namespace Main.Room.MiniRoom
             // go.transform.localScale *= scaleFactor * 2f;
 
             _spawnedLabels.Add(go);
+        }
+
+        private void DestroyRuntimeGlobalMeshMaterial()
+        {
+            if (_runtimeGlobalMeshMaterial == null)
+            {
+                return;
+            }
+
+            Destroy(_runtimeGlobalMeshMaterial);
+            _runtimeGlobalMeshMaterial = null;
+        }
+
+        private void OnDestroy()
+        {
+            DestroyRuntimeGlobalMeshMaterial();
         }
 
     }
