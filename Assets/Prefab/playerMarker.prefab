@@ -97,4 +97,4 @@ MonoBehaviour:
   roomRoot: {fileID: 0}
   roomCenterLocal: {x: 0, y: 0, z: 0}
   scaleFactor: 0.01
-  markerMaterial: {fileID: 2100000, guid: d4b438dc8ad501b49a2690e746518b8e, type: 2}
+  markerMaterial: {fileID: 2100000, guid: bc01c8e254f084176880513cede566d4, type: 2}

@@ -38,7 +38,10 @@ namespace Main.Room.SLAMRoom
 		public bool showPath = true;
 		public LineRenderer pathLineRenderer;
 		public Material pathMaterial;
-		public Color pathColor = new Color(1f, 0.72f, 0.18f, 1f);
+		[Tooltip("Color used at the newest point of the path.")]
+		public Color pathHeadColor = new Color(1f, 0.95f, 0.35f, 1f);
+		[Tooltip("Color used toward the older end of the path.")]
+		public Color pathColor = new Color(1f, 0.72f, 0.18f, 0.25f);
 		public float pathWidth = 0.025f;
 		public int maxPathPoints = 2000;
 		public float minPathPointDistance = 0.03f;
@@ -322,6 +325,7 @@ namespace Main.Room.SLAMRoom
 			pathLineRenderer.loop = false;
 			pathLineRenderer.widthMultiplier = pathWidth;
 			pathLineRenderer.positionCount = pathPoints.Count;
+			pathLineRenderer.colorGradient = BuildPathGradient();
 			pathLineRenderer.numCornerVertices = 2;
 			pathLineRenderer.numCapVertices = 2;
 			pathLineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -363,11 +367,11 @@ namespace Main.Room.SLAMRoom
 				pathLineRenderer.material = material;
 				if (material.HasProperty("_Color"))
 				{
-					material.color = pathColor;
+					material.color = Color.white;
 				}
 			}
 
-			pathLineRenderer.startColor = pathColor;
+			pathLineRenderer.startColor = pathHeadColor;
 			pathLineRenderer.endColor = pathColor;
 		}
 
@@ -512,10 +516,28 @@ namespace Main.Room.SLAMRoom
 			EnsurePathPointBuffer(pathPoints.Count);
 			for (int i = 0; i < pathPoints.Count; i++)
 			{
-				pathPointBuffer[i] = pathPoints[i];
+				pathPointBuffer[i] = pathPoints[pathPoints.Count - 1 - i];
 			}
 
 			pathLineRenderer.SetPositions(pathPointBuffer);
+		}
+
+		private Gradient BuildPathGradient()
+		{
+			Gradient gradient = new Gradient();
+			gradient.SetKeys(
+				new[]
+				{
+					new GradientColorKey(pathHeadColor, 0f),
+					new GradientColorKey(pathColor, 1f)
+				},
+				new[]
+				{
+					new GradientAlphaKey(pathHeadColor.a, 0f),
+					new GradientAlphaKey(pathColor.a, 1f)
+				}
+			);
+			return gradient;
 		}
 
 		private void EnsurePathPointBuffer(int requiredCount)

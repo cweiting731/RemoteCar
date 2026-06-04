@@ -1,158 +1,253 @@
 using UnityEngine;
 using Meta.XR.MRUtilityKit;
 using System.Collections.Generic;
+using System.Linq;
 
-[RequireComponent(typeof(ParticleSystem))]
 public class MiniRoomGenerator : MonoBehaviour
 {
-    private ParticleSystem pcParticleSystem;
+    [Header("MiniRoom 縮放")]
+    public float miniScale = 0.01f;
 
-    [Header("點雲縮放與外觀設定")]
-    public float displayScale = 0.01f;     // 預設縮放 0.01 倍
-    public Color pointColor = Color.cyan;   // 點雲顏色
-    public float particleSize = 0.005f;    // 點的大小
+    [Header("Room search")]
+    public string roomNamePrefix = "Room -";
 
-    void Awake()
+    [Header("半透明材質")]
+    [Tooltip("可選。若不指定，會從來源材質複製並轉成半透明。")]
+    public Material transparentMaterial;
+    [Range(0f, 1f)]
+    public float alpha = 0.35f;
+    public Color tintColor = Color.cyan;
+
+    private Transform miniRoot;
+    private Material runtimeTransparentMaterial;
+
+    private void Start()
     {
-        pcParticleSystem = GetComponent<ParticleSystem>();
-        SetupParticleSystem(); // 自動設定 Particle System 參數
-    }
-
-    void Start()
-    {
-        // 監聽 MRUK 的房間載入完成事件
         if (MRUK.Instance != null)
         {
             MRUK.Instance.RegisterSceneLoadedCallback(OnSceneLoaded);
         }
     }
 
-    // 當你在 Unity 編輯器中「第一次掛載此腳本」或「點擊 Reset」時，會自動執行此處的設定
-    void Reset()
-    {
-        SetupParticleSystem();
-    }
-
-    /// <summary>
-    /// 自動初始化與設定 Particle System 的各項屬性，防止粒子飛走或手動設定錯誤
-    /// </summary>
-    void SetupParticleSystem()
-    {
-        if (pcParticleSystem == null) pcParticleSystem = GetComponent<ParticleSystem>();
-        
-        // 1. 基本模組設定 (Main Module)
-        var main = pcParticleSystem.main;
-        main.duration = 1f;
-        main.loop = false;
-        main.startLifetime = 1000f; // 讓點保持存活不消失
-        main.startSpeed = 0f;       // 點必須固定在原地
-        main.simulationSpace = ParticleSystemSimulationSpace.Local; // 設為 Local，移動父物件時迷你房間才會跟著動
-        main.maxParticles = 100000; // 支持高達 10 萬個點
-
-        // 2. 關閉發射模組 (Emission) 與形狀模組 (Shape)
-        var emission = pcParticleSystem.emission;
-        emission.rateOverTime = 0f;
-        
-        var shape = pcParticleSystem.shape;
-        shape.enabled = false;
-
-        // 3. 渲染模組設定 (Renderer)
-        var psRenderer = GetComponent<ParticleSystemRenderer>();
-        if (psRenderer != null)
-        {
-            psRenderer.renderMode = ParticleSystemRenderMode.Billboard;
-            // 如果你有特定的粒子材質，可以在這裡手動賦值，預設會使用 Unity 的 Default-Particle
-        }
-    }
-
-    void OnSceneLoaded()
+    private void OnSceneLoaded()
     {
         GenerateMiniRoom();
     }
 
-    [ContextMenu("手動刷新迷你房間")]
+    [ContextMenu("手動刷新 Mini GLOBAL_MESH")]
     public void GenerateMiniRoom()
     {
-        MRUKRoom currentRoom = MRUK.Instance.GetCurrentRoom();
-        if (currentRoom == null)
+        if (MRUK.Instance == null)
         {
-            Debug.LogError("找不到當前房間！");
+            Debug.LogError("MRUK.Instance 為 null，尚未初始化。");
             return;
         }
 
-        // 修正：在 MRUK 中正確尋找 Global Mesh GameObject 的方法
-        GameObject globalMeshObj = FindGlobalMeshObject(currentRoom);
-
-        if (globalMeshObj == null)
+        List<Transform> roomRoots = FindRoomRoots();
+        if (roomRoots.Count == 0)
         {
-            Debug.LogError("找不到 Global Mesh！請確認 [BuildingBlock] Effect Mesh 的 Cut Holes 是否設為 None。");
+            Debug.LogError($"找不到任何房間根物件，請確認名稱前綴是否為 {roomNamePrefix}。");
             return;
         }
 
-        MeshFilter mf = globalMeshObj.GetComponent<MeshFilter>();
-        if (mf == null || mf.sharedMesh == null)
-        {
-            Debug.LogError("Global Mesh 上沒有找到有效的 MeshFilter。");
-            return;
-        }
-
-        Vector3[] vertices = mf.sharedMesh.vertices;
-        int pointCount = vertices.Length;
-
-        // 準備粒子陣列
-        ParticleSystem.Particle[] particles = new ParticleSystem.Particle[pointCount];
-
-        for (int i = 0; i < pointCount; i++)
-        {
-            // 取得原始房間網格的頂點座標
-            Vector3 rawPos = vertices[i];
-
-            // 將其乘以 0.01 倍，縮放到 Particle System 的 Local 空間
-            particles[i].position = rawPos * displayScale;
-
-            // 設定粒子的基本外觀
-            particles[i].startColor = pointColor;
-            particles[i].startSize = particleSize;
-            particles[i].remainingLifetime = 1000f; // 保持存活
-        }
-
-        // 清除舊粒子並塞入新點雲
-        pcParticleSystem.Clear();
-        pcParticleSystem.SetParticles(particles, pointCount);
-
-        Debug.Log($"[MiniRoom] 成功用 Particle System 生成迷你房間！總點數: {pointCount}");
+        RebuildMiniGlobalMeshes(roomRoots);
     }
 
-    /// <summary>
-    /// 修正後的尋找 Global Mesh 方法：遍歷房間內的所有錨點
-    /// </summary>
-    private GameObject FindGlobalMeshObject(MRUKRoom room)
+    private void RebuildMiniGlobalMeshes(List<Transform> roomRoots)
     {
-        // 方法 A：尋找帶有 GLOBAL_MESH 標籤的特殊錨點
-        foreach (var anchor in room.Anchors)
+        if (miniRoot != null)
         {
-            if (anchor.HasLabel(OVRSceneManager.Classification.GlobalMesh) || 
-                anchor.name.Contains("GLOBAL_MESH") || 
-                anchor.name.Contains("GlobalMesh"))
+            Destroy(miniRoot.gameObject);
+            miniRoot = null;
+        }
+
+        GameObject root = new GameObject("Mini_GLOBAL_MESHes");
+        miniRoot = root.transform;
+        miniRoot.SetParent(transform, false);
+        miniRoot.localScale = Vector3.one * Mathf.Max(0.0001f, miniScale);
+
+        int builtCount = 0;
+        int skippedCount = 0;
+
+        foreach (Transform roomRoot in roomRoots)
+        {
+            GameObject globalMeshObj = FindGlobalMeshObject(roomRoot);
+            if (globalMeshObj == null)
             {
-                // 通常網格會掛載在該錨點本身或其子物件上
-                if (anchor.GetComponent<MeshFilter>() != null) return anchor.gameObject;
-                
-                MeshFilter childMf = anchor.GetComponentInChildren<MeshFilter>();
-                if (childMf != null) return childMf.gameObject;
+                skippedCount++;
+                continue;
+            }
+
+            MeshFilter srcMf = globalMeshObj.GetComponent<MeshFilter>();
+            MeshRenderer srcMr = globalMeshObj.GetComponent<MeshRenderer>();
+            if (srcMf == null || srcMf.sharedMesh == null)
+            {
+                skippedCount++;
+                continue;
+            }
+
+            if (CreateMiniRoomMesh(roomRoot, srcMf, srcMr))
+            {
+                builtCount++;
+            }
+            else
+            {
+                skippedCount++;
             }
         }
 
-        // 方法 B：如果從錨點找不到，直接從 Effect Mesh 生成出來的環境物件中用名字搜尋
-        MeshFilter[] allMeshFilters = FindObjectsOfType<MeshFilter>();
-        foreach (var filter in allMeshFilters)
+        Debug.Log($"[MiniRoom] 已生成 GLOBAL_MESH 迷你房間，共建立 {builtCount} 個房間，略過 {skippedCount} 個。");
+    }
+
+    private bool CreateMiniRoomMesh(Transform roomRoot, MeshFilter srcMf, MeshRenderer srcMr)
+    {
+        GameObject roomGo = new GameObject($"Mini_{roomRoot.name}_GLOBAL_MESH");
+        roomGo.transform.SetParent(miniRoot, false);
+
+        Vector3 localPos = roomRoot.InverseTransformPoint(srcMf.transform.position);
+        Quaternion localRot = Quaternion.Inverse(roomRoot.rotation) * srcMf.transform.rotation;
+
+        roomGo.transform.localPosition = localPos;
+        roomGo.transform.localRotation = localRot;
+        roomGo.transform.localScale = srcMf.transform.lossyScale;
+
+        MeshFilter dstMf = roomGo.AddComponent<MeshFilter>();
+        dstMf.sharedMesh = Instantiate(srcMf.sharedMesh);
+
+        MeshRenderer dstMr = roomGo.AddComponent<MeshRenderer>();
+        dstMr.sharedMaterial = ResolveTransparentMaterial(srcMr);
+        dstMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        dstMr.receiveShadows = false;
+
+        MeshCollider dstMc = roomGo.AddComponent<MeshCollider>();
+        dstMc.sharedMesh = dstMf.sharedMesh;
+
+        return true;
+    }
+
+    private List<Transform> FindRoomRoots()
+    {
+        return GameObject
+            .FindObjectsOfType<Transform>(true)
+            .Where(t => t.name.StartsWith(roomNamePrefix) && t.GetComponentsInChildren<MeshRenderer>(true).Length > 0)
+            .OrderBy(t => t.name)
+            .ToList();
+    }
+
+    private GameObject FindGlobalMeshObject(Transform roomRoot)
+    {
+        if (roomRoot == null)
         {
+            return null;
+        }
+
+        MeshFilter[] roomMeshFilters = roomRoot.GetComponentsInChildren<MeshFilter>(true);
+        foreach (var filter in roomMeshFilters)
+        {
+            if (filter == null)
+            {
+                continue;
+            }
+
             if (filter.gameObject.name.Contains("GLOBAL_MESH") || filter.gameObject.name.Contains("GlobalMesh"))
             {
                 return filter.gameObject;
             }
         }
 
+        MeshFilter[] allMeshFilters = FindObjectsOfType<MeshFilter>();
+        foreach (var filter in allMeshFilters)
+        {
+            if (filter != null && filter.transform.IsChildOf(roomRoot) &&
+                (filter.gameObject.name.Contains("GLOBAL_MESH") || filter.gameObject.name.Contains("GlobalMesh")))
+            {
+                return filter.gameObject;
+            }
+        }
+
         return null;
+    }
+
+    private Material ResolveTransparentMaterial(MeshRenderer srcMr)
+    {
+        if (runtimeTransparentMaterial != null)
+        {
+            return runtimeTransparentMaterial;
+        }
+
+        if (transparentMaterial != null)
+        {
+            runtimeTransparentMaterial = new Material(transparentMaterial);
+        }
+        else if (srcMr != null && srcMr.sharedMaterial != null)
+        {
+            runtimeTransparentMaterial = new Material(srcMr.sharedMaterial);
+        }
+        else
+        {
+            Shader shader = Shader.Find("Standard");
+            if (shader == null)
+            {
+                shader = Shader.Find("Universal Render Pipeline/Lit");
+            }
+
+            runtimeTransparentMaterial = shader != null ? new Material(shader) : new Material(Shader.Find("Sprites/Default"));
+        }
+
+        runtimeTransparentMaterial.name = "MiniRoom_GlobalMesh_Transparent";
+        ApplyTransparency(runtimeTransparentMaterial);
+        return runtimeTransparentMaterial;
+    }
+
+    private void ApplyTransparency(Material material)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        if (material.HasProperty("_Surface"))
+        {
+            material.SetFloat("_Surface", 1f);
+            material.SetFloat("_Blend", 0f);
+            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetInt("_ZWrite", 0);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        }
+
+        if (material.HasProperty("_Mode"))
+        {
+            material.SetFloat("_Mode", 3f);
+            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetInt("_ZWrite", 0);
+            material.DisableKeyword("_ALPHATEST_ON");
+            material.EnableKeyword("_ALPHABLEND_ON");
+            material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        }
+
+        Color tint = tintColor;
+        tint.a = Mathf.Clamp01(alpha);
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", tint);
+        }
+
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", tint);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (runtimeTransparentMaterial != null)
+        {
+            Destroy(runtimeTransparentMaterial);
+            runtimeTransparentMaterial = null;
+        }
     }
 }
