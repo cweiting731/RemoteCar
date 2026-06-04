@@ -19,8 +19,8 @@ namespace Main.Room
         public bool includeInactiveObjects = true;
 
         [Header("Alignment Offset")]
-        [Tooltip("World-space offset applied to the marker position before aligning the SLAM room root.")]
-        public Vector3 positionOffset = Vector3.zero;
+        [Tooltip("World-space offset applied to the marker position before aligning the SLAM room root. Negative Y places the target below PlayerMarker.")]
+        public Vector3 positionOffset = new Vector3(0f, -0.1f, 0f);
 
         [Tooltip("Additional yaw offset in degrees, applied around world up.")]
         public float yawOffsetDegrees = 0f;

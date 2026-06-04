@@ -126,6 +126,36 @@ namespace ROS2
             RecordTopicDisplayLatency(topicName, header, -1.0);
         }
 
+        public void RecordTopicDisplayLatencyFromHeader(string topicName, HeaderMsg header)
+        {
+            if (header?.stamp == null)
+            {
+                SetTopicDisplayLatency(topicName, -1f);
+                return;
+            }
+
+            RecordTopicDisplayLatencyFromHeader(topicName, header.stamp.sec, header.stamp.nanosec);
+        }
+
+        public void RecordTopicDisplayLatencyFromHeader(string topicName, double stampSeconds, double stampNanoseconds)
+        {
+            if (string.IsNullOrEmpty(topicName))
+            {
+                return;
+            }
+
+            double sentSeconds = stampSeconds + stampNanoseconds * 1e-9;
+            if (sentSeconds <= 0.0)
+            {
+                SetTopicDisplayLatency(topicName, -1f);
+                return;
+            }
+
+            double nowSeconds = GetCurrentUnixSeconds();
+            float latencyMs = (float)((nowSeconds - sentSeconds) * 1000.0);
+            SetTopicDisplayLatency(topicName, Mathf.Max(0f, latencyMs));
+        }
+
         public void RecordTopicDisplayLatency(string topicName, HeaderMsg header, double fallbackReceiveUnixSeconds)
         {
             if (header?.stamp == null)

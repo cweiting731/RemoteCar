@@ -210,6 +210,9 @@ namespace Main.Room.MiniRoom
 
                 foreach (var mf in meshFilters)
                 {
+                    if (mf.name.IndexOf("GLOBAL_MESH", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        continue;
+
                     if (mf.sharedMesh == null || mf.sharedMesh.vertexCount == 0)
                         continue;
 
