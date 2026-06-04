@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using ROS2;
 using RosMessageTypes.Sensor;
 using Unity.Robotics.ROSTCPConnector;
@@ -36,6 +38,23 @@ namespace Main.Room.SLAMRoom
 		public float roomScale = 1f;
 		[Tooltip("When enabled, parent Transform scale is compensated so roomScale=1 is a real-world 1:1 room.")]
 		public bool roomScaleIsWorldScale = true;
+
+		[Header("ICP Alignment")]
+		[Tooltip("Root containing MiniRoomContentBuilder generated GLOBAL_MESH objects. If empty, this searches by icpTargetRootName.")]
+		public Transform icpTargetGlobalMeshRoot;
+		public string icpTargetRootName = "MiniRoomGlobalMeshes";
+		[Tooltip("Transform moved by ICP. Defaults to miniRoomRoot, then the ParticleSystem transform.")]
+		public Transform icpTransformRoot;
+		public int icpIterations = 12;
+		public int icpSourceSampleCount = 1200;
+		public int icpTargetSampleCount = 2500;
+		[Tooltip("0 disables rejection. Use a larger value when the initial offset is big.")]
+		public float icpMaxCorrespondenceDistance = 0f;
+		public bool icpAllowScale = true;
+		public bool icpClampScale = true;
+		public Vector2 icpScaleClamp = new Vector2(0.25f, 4f);
+		[Tooltip("How many source points are matched before yielding a frame during button-triggered ICP.")]
+		public int icpSourcePointsPerFrame = 80;
 
 		[Header("Coordinate Conversion")]
 		[Tooltip("Use RosBaseLinkToUnity when the ROS2 source frame is x forward, y left, z up.")]
@@ -89,6 +108,13 @@ namespace Main.Room.SLAMRoom
 		private string rgbFieldType = string.Empty;
 		private string rgbaFieldType = string.Empty;
 		private string intensityFieldType = string.Empty;
+		private ParticleSystem.Particle[] icpParticleReadBuffer;
+		private readonly List<Vector3> icpSourceWorldPoints = new List<Vector3>();
+		private readonly List<Vector3> icpTargetWorldPoints = new List<Vector3>();
+		private readonly List<Vector3> icpMatchedSourcePoints = new List<Vector3>();
+		private readonly List<Vector3> icpMatchedTargetPoints = new List<Vector3>();
+		private Coroutine icpAlignmentCoroutine;
+		public bool IsIcpRunning { get; private set; }
 
 		private void Awake()
 		{
@@ -102,6 +128,15 @@ namespace Main.Room.SLAMRoom
 			roomScale = Mathf.Max(0.0001f, roomScale);
 			renderIntervalSeconds = Mathf.Max(0.01f, renderIntervalSeconds);
 			maxPoints = Mathf.Max(1, maxPoints);
+			icpIterations = Mathf.Max(1, icpIterations);
+			icpSourceSampleCount = Mathf.Max(8, icpSourceSampleCount);
+			icpTargetSampleCount = Mathf.Max(8, icpTargetSampleCount);
+			icpSourcePointsPerFrame = Mathf.Max(1, icpSourcePointsPerFrame);
+			icpMaxCorrespondenceDistance = Mathf.Max(0f, icpMaxCorrespondenceDistance);
+			icpScaleClamp = new Vector2(
+				Mathf.Max(0.0001f, icpScaleClamp.x),
+				Mathf.Max(0.0001f, Mathf.Max(icpScaleClamp.x, icpScaleClamp.y))
+			);
 			simulatedPointCount = Mathf.Max(1, simulatedPointCount);
 			simulatedRoomSizeMeters = new Vector3(
 				Mathf.Max(0.1f, simulatedRoomSizeMeters.x),
@@ -685,6 +720,554 @@ namespace Main.Room.SLAMRoom
 			}
 
 			return result;
+		}
+
+		public void AlignPointCloudToGlobalMeshByICPFromButton()
+		{
+			if (!Application.isPlaying)
+			{
+				AlignPointCloudToGlobalMeshByICP();
+				return;
+			}
+
+			if (IsIcpRunning)
+			{
+				if (enableDebugLog)
+				{
+					Debug.Log("[ROS2 PointCloud ICP] ICP is already running.");
+				}
+
+				return;
+			}
+
+			icpAlignmentCoroutine = StartCoroutine(AlignPointCloudToGlobalMeshByICPCoroutine());
+		}
+
+		[ContextMenu("Align PointCloud To GlobalMesh By ICP")]
+		public bool AlignPointCloudToGlobalMeshByICP()
+		{
+			try
+			{
+				if (particleSystemInstance == null)
+				{
+					SetupParticleSystem();
+				}
+
+				Transform targetRoot = ResolveIcpTargetRoot();
+				if (targetRoot == null)
+				{
+					Debug.LogWarning($"[ROS2 PointCloud ICP] Target root '{icpTargetRootName}' was not found.");
+					return false;
+				}
+
+				Transform alignRoot = ResolveIcpTransformRoot();
+				if (alignRoot == null)
+				{
+					Debug.LogWarning("[ROS2 PointCloud ICP] No transform root available to move.");
+					return false;
+				}
+
+				if (!CollectPointCloudWorldSamples(icpSourceWorldPoints, icpSourceSampleCount))
+				{
+					Debug.LogWarning("[ROS2 PointCloud ICP] No point cloud samples available. Wait for a cloud frame first.");
+					return false;
+				}
+
+				if (!CollectTargetMeshWorldSamples(targetRoot, icpTargetWorldPoints, icpTargetSampleCount))
+				{
+					Debug.LogWarning($"[ROS2 PointCloud ICP] No mesh samples found under '{targetRoot.name}'.");
+					return false;
+				}
+
+				Quaternion cumulativeRotation = Quaternion.identity;
+				float cumulativeScale = 1f;
+				Vector3 cumulativeTranslation = Vector3.zero;
+				float finalRmse = 0f;
+				int finalMatchCount = 0;
+
+				for (int i = 0; i < Mathf.Max(1, icpIterations); i++)
+				{
+					BuildNearestNeighborPairs(
+						icpSourceWorldPoints,
+						icpTargetWorldPoints,
+						icpMatchedSourcePoints,
+						icpMatchedTargetPoints,
+						icpMaxCorrespondenceDistance
+					);
+
+					if (icpMatchedSourcePoints.Count < 6)
+					{
+						Debug.LogWarning($"[ROS2 PointCloud ICP] Too few matches ({icpMatchedSourcePoints.Count}). Try increasing icpMaxCorrespondenceDistance.");
+						return false;
+					}
+
+					if (!TryComputeYawSimilarity(
+						icpMatchedSourcePoints,
+						icpMatchedTargetPoints,
+						out Quaternion stepRotation,
+						out float stepScale,
+						out Vector3 stepTranslation,
+						out finalRmse))
+					{
+						Debug.LogWarning("[ROS2 PointCloud ICP] Failed to compute transform.");
+						return false;
+					}
+
+					finalMatchCount = icpMatchedSourcePoints.Count;
+					for (int p = 0; p < icpSourceWorldPoints.Count; p++)
+					{
+						icpSourceWorldPoints[p] = stepRotation * (icpSourceWorldPoints[p] * stepScale) + stepTranslation;
+					}
+
+					cumulativeTranslation = stepRotation * (cumulativeTranslation * stepScale) + stepTranslation;
+					cumulativeRotation = stepRotation * cumulativeRotation;
+					cumulativeScale *= stepScale;
+				}
+
+				ApplyIcpTransform(alignRoot, cumulativeRotation, cumulativeScale, cumulativeTranslation);
+
+				if (enableDebugLog)
+				{
+					Debug.Log($"[ROS2 PointCloud ICP] Aligned '{alignRoot.name}' to '{targetRoot.name}'. matches={finalMatchCount}, rmse={finalRmse:0.0000}, scaleDelta={cumulativeScale:0.####}, yawDelta={cumulativeRotation.eulerAngles.y:0.##}");
+				}
+
+				return true;
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError($"[ROS2 PointCloud ICP] Align failed: {ex.Message}");
+				return false;
+			}
+		}
+
+		private IEnumerator AlignPointCloudToGlobalMeshByICPCoroutine()
+		{
+			IsIcpRunning = true;
+
+			try
+			{
+				if (particleSystemInstance == null)
+				{
+					SetupParticleSystem();
+				}
+
+				Transform targetRoot = ResolveIcpTargetRoot();
+				if (targetRoot == null)
+				{
+					Debug.LogWarning($"[ROS2 PointCloud ICP] Target root '{icpTargetRootName}' was not found.");
+					yield break;
+				}
+
+				Transform alignRoot = ResolveIcpTransformRoot();
+				if (alignRoot == null)
+				{
+					Debug.LogWarning("[ROS2 PointCloud ICP] No transform root available to move.");
+					yield break;
+				}
+
+				if (!CollectPointCloudWorldSamples(icpSourceWorldPoints, icpSourceSampleCount))
+				{
+					Debug.LogWarning("[ROS2 PointCloud ICP] No point cloud samples available. Wait for a cloud frame first.");
+					yield break;
+				}
+
+				if (!CollectTargetMeshWorldSamples(targetRoot, icpTargetWorldPoints, icpTargetSampleCount))
+				{
+					Debug.LogWarning($"[ROS2 PointCloud ICP] No mesh samples found under '{targetRoot.name}'.");
+					yield break;
+				}
+
+				Quaternion cumulativeRotation = Quaternion.identity;
+				float cumulativeScale = 1f;
+				Vector3 cumulativeTranslation = Vector3.zero;
+				float finalRmse = 0f;
+				int finalMatchCount = 0;
+
+				for (int i = 0; i < Mathf.Max(1, icpIterations); i++)
+				{
+					yield return BuildNearestNeighborPairsCoroutine(
+						icpSourceWorldPoints,
+						icpTargetWorldPoints,
+						icpMatchedSourcePoints,
+						icpMatchedTargetPoints,
+						icpMaxCorrespondenceDistance
+					);
+
+					if (icpMatchedSourcePoints.Count < 6)
+					{
+						Debug.LogWarning($"[ROS2 PointCloud ICP] Too few matches ({icpMatchedSourcePoints.Count}). Try increasing icpMaxCorrespondenceDistance.");
+						yield break;
+					}
+
+					if (!TryComputeYawSimilarity(
+						icpMatchedSourcePoints,
+						icpMatchedTargetPoints,
+						out Quaternion stepRotation,
+						out float stepScale,
+						out Vector3 stepTranslation,
+						out finalRmse))
+					{
+						Debug.LogWarning("[ROS2 PointCloud ICP] Failed to compute transform.");
+						yield break;
+					}
+
+					finalMatchCount = icpMatchedSourcePoints.Count;
+					for (int p = 0; p < icpSourceWorldPoints.Count; p++)
+					{
+						icpSourceWorldPoints[p] = stepRotation * (icpSourceWorldPoints[p] * stepScale) + stepTranslation;
+					}
+
+					cumulativeTranslation = stepRotation * (cumulativeTranslation * stepScale) + stepTranslation;
+					cumulativeRotation = stepRotation * cumulativeRotation;
+					cumulativeScale *= stepScale;
+					yield return null;
+				}
+
+				ApplyIcpTransform(alignRoot, cumulativeRotation, cumulativeScale, cumulativeTranslation);
+
+				if (enableDebugLog)
+				{
+					Debug.Log($"[ROS2 PointCloud ICP] Aligned '{alignRoot.name}' to '{targetRoot.name}'. matches={finalMatchCount}, rmse={finalRmse:0.0000}, scaleDelta={cumulativeScale:0.####}, yawDelta={cumulativeRotation.eulerAngles.y:0.##}");
+				}
+			}
+			finally
+			{
+				IsIcpRunning = false;
+				icpAlignmentCoroutine = null;
+			}
+		}
+
+		private Transform ResolveIcpTargetRoot()
+		{
+			if (icpTargetGlobalMeshRoot != null)
+			{
+				return icpTargetGlobalMeshRoot;
+			}
+
+			if (string.IsNullOrEmpty(icpTargetRootName))
+			{
+				return null;
+			}
+
+			Transform[] transforms = FindObjectsOfType<Transform>(true);
+			foreach (Transform candidate in transforms)
+			{
+				if (candidate.name.Equals(icpTargetRootName, StringComparison.OrdinalIgnoreCase))
+				{
+					icpTargetGlobalMeshRoot = candidate;
+					return candidate;
+				}
+			}
+
+			return null;
+		}
+
+		private Transform ResolveIcpTransformRoot()
+		{
+			if (icpTransformRoot != null)
+			{
+				return icpTransformRoot;
+			}
+
+			if (miniRoomRoot != null)
+			{
+				return miniRoomRoot;
+			}
+
+			return particleSystemInstance != null ? particleSystemInstance.transform : transform;
+		}
+
+		private bool CollectPointCloudWorldSamples(List<Vector3> samples, int maxSampleCount)
+		{
+			samples.Clear();
+
+			if (particleSystemInstance == null)
+			{
+				return false;
+			}
+
+			int particleCount = particleSystemInstance.particleCount;
+			if (particleCount <= 0)
+			{
+				particleCount = lastRenderedPointCount;
+			}
+
+			if (particleCount <= 0)
+			{
+				return false;
+			}
+
+			if (icpParticleReadBuffer == null || icpParticleReadBuffer.Length < particleCount)
+			{
+				icpParticleReadBuffer = new ParticleSystem.Particle[Mathf.Max(particleCount, 1024)];
+			}
+
+			int readCount = particleSystemInstance.GetParticles(icpParticleReadBuffer);
+			if (readCount <= 0)
+			{
+				readCount = Mathf.Min(lastRenderedPointCount, particleBuffer != null ? particleBuffer.Length : 0);
+				for (int i = 0; i < readCount; i++)
+				{
+					icpParticleReadBuffer[i] = particleBuffer[i];
+				}
+			}
+
+			if (readCount <= 0)
+			{
+				return false;
+			}
+
+			int stride = Mathf.Max(1, readCount / Mathf.Max(1, maxSampleCount));
+			for (int i = 0; i < readCount && samples.Count < maxSampleCount; i += stride)
+			{
+				Vector3 worldPoint = particleSystemInstance.transform.TransformPoint(icpParticleReadBuffer[i].position);
+				if (IsFinite(worldPoint))
+				{
+					samples.Add(worldPoint);
+				}
+			}
+
+			return samples.Count >= 6;
+		}
+
+		private bool CollectTargetMeshWorldSamples(Transform targetRoot, List<Vector3> samples, int maxSampleCount)
+		{
+			samples.Clear();
+
+			if (targetRoot == null)
+			{
+				return false;
+			}
+
+			MeshFilter[] meshFilters = targetRoot.GetComponentsInChildren<MeshFilter>(true);
+			int totalVertexCount = 0;
+			foreach (MeshFilter mf in meshFilters)
+			{
+				if (mf != null && mf.sharedMesh != null)
+				{
+					totalVertexCount += mf.sharedMesh.vertexCount;
+				}
+			}
+
+			if (totalVertexCount <= 0)
+			{
+				return false;
+			}
+
+			int stride = Mathf.Max(1, totalVertexCount / Mathf.Max(1, maxSampleCount));
+			int globalVertexIndex = 0;
+
+			foreach (MeshFilter mf in meshFilters)
+			{
+				if (mf == null || mf.sharedMesh == null)
+				{
+					continue;
+				}
+
+				Vector3[] vertices = mf.sharedMesh.vertices;
+				for (int i = 0; i < vertices.Length && samples.Count < maxSampleCount; i++)
+				{
+					if (globalVertexIndex % stride == 0)
+					{
+						Vector3 worldPoint = mf.transform.TransformPoint(vertices[i]);
+						if (IsFinite(worldPoint))
+						{
+							samples.Add(worldPoint);
+						}
+					}
+
+					globalVertexIndex++;
+				}
+			}
+
+			return samples.Count >= 6;
+		}
+
+		private void BuildNearestNeighborPairs(
+			List<Vector3> sourcePoints,
+			List<Vector3> targetPoints,
+			List<Vector3> matchedSource,
+			List<Vector3> matchedTarget,
+			float maxDistance)
+		{
+			matchedSource.Clear();
+			matchedTarget.Clear();
+
+			float maxDistanceSqr = maxDistance > 0f ? maxDistance * maxDistance : float.PositiveInfinity;
+			for (int i = 0; i < sourcePoints.Count; i++)
+			{
+				Vector3 source = sourcePoints[i];
+				float bestDistanceSqr = float.PositiveInfinity;
+				Vector3 bestTarget = Vector3.zero;
+
+				for (int t = 0; t < targetPoints.Count; t++)
+				{
+					float distanceSqr = (targetPoints[t] - source).sqrMagnitude;
+					if (distanceSqr < bestDistanceSqr)
+					{
+						bestDistanceSqr = distanceSqr;
+						bestTarget = targetPoints[t];
+					}
+				}
+
+				if (bestDistanceSqr <= maxDistanceSqr)
+				{
+					matchedSource.Add(source);
+					matchedTarget.Add(bestTarget);
+				}
+			}
+		}
+
+		private IEnumerator BuildNearestNeighborPairsCoroutine(
+			List<Vector3> sourcePoints,
+			List<Vector3> targetPoints,
+			List<Vector3> matchedSource,
+			List<Vector3> matchedTarget,
+			float maxDistance)
+		{
+			matchedSource.Clear();
+			matchedTarget.Clear();
+
+			float maxDistanceSqr = maxDistance > 0f ? maxDistance * maxDistance : float.PositiveInfinity;
+			int pointsSinceYield = 0;
+
+			for (int i = 0; i < sourcePoints.Count; i++)
+			{
+				Vector3 source = sourcePoints[i];
+				float bestDistanceSqr = float.PositiveInfinity;
+				Vector3 bestTarget = Vector3.zero;
+
+				for (int t = 0; t < targetPoints.Count; t++)
+				{
+					float distanceSqr = (targetPoints[t] - source).sqrMagnitude;
+					if (distanceSqr < bestDistanceSqr)
+					{
+						bestDistanceSqr = distanceSqr;
+						bestTarget = targetPoints[t];
+					}
+				}
+
+				if (bestDistanceSqr <= maxDistanceSqr)
+				{
+					matchedSource.Add(source);
+					matchedTarget.Add(bestTarget);
+				}
+
+				pointsSinceYield++;
+				if (pointsSinceYield >= icpSourcePointsPerFrame)
+				{
+					pointsSinceYield = 0;
+					yield return null;
+				}
+			}
+		}
+
+		private bool TryComputeYawSimilarity(
+			List<Vector3> sourcePoints,
+			List<Vector3> targetPoints,
+			out Quaternion rotation,
+			out float scale,
+			out Vector3 translation,
+			out float rmse)
+		{
+			rotation = Quaternion.identity;
+			scale = 1f;
+			translation = Vector3.zero;
+			rmse = 0f;
+
+			int count = Mathf.Min(sourcePoints.Count, targetPoints.Count);
+			if (count < 2)
+			{
+				return false;
+			}
+
+			Vector3 sourceCentroid = Vector3.zero;
+			Vector3 targetCentroid = Vector3.zero;
+			for (int i = 0; i < count; i++)
+			{
+				sourceCentroid += sourcePoints[i];
+				targetCentroid += targetPoints[i];
+			}
+
+			sourceCentroid /= count;
+			targetCentroid /= count;
+
+			float a = 0f;
+			float b = 0f;
+			float sourceSq = 0f;
+			for (int i = 0; i < count; i++)
+			{
+				Vector3 source = sourcePoints[i] - sourceCentroid;
+				Vector3 target = targetPoints[i] - targetCentroid;
+
+				a += source.x * target.x + source.z * target.z;
+				b += source.z * target.x - source.x * target.z;
+				sourceSq += source.x * source.x + source.z * source.z;
+			}
+
+			if (sourceSq < 0.000001f)
+			{
+				return false;
+			}
+
+			float yawRadians = Mathf.Atan2(b, a);
+			rotation = Quaternion.Euler(0f, yawRadians * Mathf.Rad2Deg, 0f);
+
+			if (icpAllowScale)
+			{
+				scale = Mathf.Sqrt(a * a + b * b) / sourceSq;
+				if (icpClampScale)
+				{
+					scale = Mathf.Clamp(scale, icpScaleClamp.x, icpScaleClamp.y);
+				}
+			}
+
+			translation = targetCentroid - (rotation * (sourceCentroid * scale));
+
+			float errorSum = 0f;
+			for (int i = 0; i < count; i++)
+			{
+				Vector3 aligned = rotation * (sourcePoints[i] * scale) + translation;
+				errorSum += (targetPoints[i] - aligned).sqrMagnitude;
+			}
+
+			rmse = Mathf.Sqrt(errorSum / count);
+			return IsFinite(translation) && !float.IsNaN(scale) && !float.IsInfinity(scale);
+		}
+
+		private void ApplyIcpTransform(Transform alignRoot, Quaternion rotation, float scaleDelta, Vector3 translation)
+		{
+			Vector3 oldPosition = alignRoot.position;
+			alignRoot.position = rotation * (oldPosition * scaleDelta) + translation;
+			alignRoot.rotation = rotation * alignRoot.rotation;
+
+			if (icpAllowScale)
+			{
+				alignRoot.localScale *= scaleDelta;
+
+				Transform scaleTarget = miniRoomRoot != null
+					? miniRoomRoot
+					: (particleSystemInstance != null ? particleSystemInstance.transform : transform);
+
+				if (alignRoot == scaleTarget)
+				{
+					roomScale = roomScaleIsWorldScale && alignRoot.parent != null
+						? Mathf.Max(0.0001f, AverageAbsScale(alignRoot.lossyScale))
+						: Mathf.Max(0.0001f, AverageAbsScale(alignRoot.localScale));
+					ApplyRoomScale();
+				}
+			}
+		}
+
+		private float AverageAbsScale(Vector3 scale)
+		{
+			return (Mathf.Abs(scale.x) + Mathf.Abs(scale.y) + Mathf.Abs(scale.z)) / 3f;
+		}
+
+		private bool IsFinite(Vector3 value)
+		{
+			return !float.IsNaN(value.x) && !float.IsNaN(value.y) && !float.IsNaN(value.z) &&
+				!float.IsInfinity(value.x) && !float.IsInfinity(value.y) && !float.IsInfinity(value.z);
 		}
 
 		private void EnsureParticleCapacity(int requiredCount)

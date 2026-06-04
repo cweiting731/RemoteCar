@@ -16,6 +16,7 @@ namespace ROS2
             public bool isTransport; // true = Transmit(to ROS2), false = Receive(from ROS2)
             private float Mbps;
             private float displayLatencyMs = -1f;
+            private float displayFps = -1f;
 
             public float GetMbps()
             {
@@ -36,6 +37,16 @@ namespace ROS2
             {
                 displayLatencyMs = latencyMs;
             }
+
+            public float GetDisplayFps()
+            {
+                return displayFps;
+            }
+
+            public void SetDisplayFps(float fps)
+            {
+                displayFps = fps;
+            }
         }
 
         public TextMeshProUGUI infoText;
@@ -45,9 +56,11 @@ namespace ROS2
 
         private readonly object throughputLock = new object();
         private readonly Dictionary<string, long> throughputBytesByTopic = new Dictionary<string, long>();
+        private readonly Dictionary<string, int> displayedFramesByTopic = new Dictionary<string, int>();
         private ROSConnection ros;
         private float infoTimer = 0f;
         private const double MinimumPlausibleUnixSeconds = 946684800.0; // 2000-01-01 UTC
+        private const double MaximumPlausibleDisplayLatencySeconds = 60.0;
 
         private void Start()
         {
@@ -64,7 +77,7 @@ namespace ROS2
                 return;
             }
 
-            UpdateTopicMbpsFromRecordedBytes(infoTimer);
+            UpdateTopicStatsFromRecordedData(infoTimer);
             UpdateInfo();
             UpdateGraph();
             infoTimer = 0f;
@@ -90,6 +103,12 @@ namespace ROS2
                     {
                         float latencyMs = ros2.GetDisplayLatencyMs();
                         info += latencyMs >= 0f ? $"  Display Latency: {latencyMs:F1} ms\n" : "  Display Latency: -- ms\n";
+
+                        float displayFps = ros2.GetDisplayFps();
+                        if (displayFps >= 0f)
+                        {
+                            info += $"  Display FPS: {displayFps:F1}\n";
+                        }
                     }
                 }
             }
@@ -152,8 +171,13 @@ namespace ROS2
             }
 
             double nowSeconds = GetCurrentUnixSeconds();
-            float latencyMs = (float)((nowSeconds - sentSeconds) * 1000.0);
-            SetTopicDisplayLatency(topicName, Mathf.Max(0f, latencyMs));
+            if (TryGetHeaderLatencyMs(sentSeconds, nowSeconds, out float latencyMs))
+            {
+                SetTopicDisplayLatency(topicName, latencyMs);
+                return;
+            }
+
+            SetTopicDisplayLatency(topicName, -1f);
         }
 
         public void RecordTopicDisplayLatency(string topicName, HeaderMsg header, double fallbackReceiveUnixSeconds)
@@ -181,13 +205,12 @@ namespace ROS2
 
             double nowUnixSeconds = GetCurrentUnixSeconds();
             double sentUnixSeconds = stampSeconds + stampNanoseconds * 1e-9;
-            if (!IsPlausibleUnixStamp(sentUnixSeconds, nowUnixSeconds))
+            if (!TryGetHeaderLatencyMs(sentUnixSeconds, nowUnixSeconds, out float latencyMs))
             {
                 RecordReceiveToDisplayLatency(topicName, fallbackReceiveUnixSeconds, nowUnixSeconds);
                 return;
             }
 
-            float latencyMs = (float)((nowUnixSeconds - sentUnixSeconds) * 1000.0);
             SetTopicDisplayLatency(topicName, latencyMs);
         }
 
@@ -199,6 +222,24 @@ namespace ROS2
         private static bool IsPlausibleUnixStamp(double stampUnixSeconds, double nowUnixSeconds)
         {
             return stampUnixSeconds >= MinimumPlausibleUnixSeconds && stampUnixSeconds <= nowUnixSeconds + 60.0;
+        }
+
+        private static bool TryGetHeaderLatencyMs(double stampUnixSeconds, double nowUnixSeconds, out float latencyMs)
+        {
+            latencyMs = -1f;
+            if (!IsPlausibleUnixStamp(stampUnixSeconds, nowUnixSeconds))
+            {
+                return false;
+            }
+
+            double latencySeconds = nowUnixSeconds - stampUnixSeconds;
+            if (latencySeconds < 0.0 || latencySeconds > MaximumPlausibleDisplayLatencySeconds)
+            {
+                return false;
+            }
+
+            latencyMs = (float)(latencySeconds * 1000.0);
+            return true;
         }
 
         private void RecordReceiveToDisplayLatency(string topicName, double receiveUnixSeconds)
@@ -253,7 +294,25 @@ namespace ROS2
             }
         }
 
-        private void UpdateTopicMbpsFromRecordedBytes(float elapsedSeconds)
+        public void RecordTopicDisplayedFrame(string topicName)
+        {
+            if (string.IsNullOrEmpty(topicName))
+            {
+                return;
+            }
+
+            lock (throughputLock)
+            {
+                if (!displayedFramesByTopic.ContainsKey(topicName))
+                {
+                    displayedFramesByTopic.Add(topicName, 0);
+                }
+
+                displayedFramesByTopic[topicName]++;
+            }
+        }
+
+        private void UpdateTopicStatsFromRecordedData(float elapsedSeconds)
         {
             if (elapsedSeconds <= 0f)
             {
@@ -268,6 +327,31 @@ namespace ROS2
                     float mbps = throughputBytesByTopic[topicName] * 8f / elapsedSeconds / 1_000_000f;
                     SetTopicMbps(topicName, mbps);
                     throughputBytesByTopic[topicName] = 0;
+                }
+
+                topicNames = new List<string>(displayedFramesByTopic.Keys);
+                foreach (string topicName in topicNames)
+                {
+                    float fps = displayedFramesByTopic[topicName] / elapsedSeconds;
+                    SetTopicDisplayFps(topicName, fps);
+                    displayedFramesByTopic[topicName] = 0;
+                }
+            }
+        }
+
+        private void SetTopicDisplayFps(string topicName, float fps)
+        {
+            if (ros2Info == null)
+            {
+                return;
+            }
+
+            foreach (var ros2 in ros2Info)
+            {
+                if (ros2 != null && ros2.topicName == topicName)
+                {
+                    ros2.SetDisplayFps(fps);
+                    break;
                 }
             }
         }

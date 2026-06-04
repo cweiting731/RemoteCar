@@ -34,6 +34,7 @@ namespace StreamVideo
         private string encoding;
         private double stampSeconds;
         private uint stampNanoseconds;
+        private double receiveUnixSeconds = -1.0;
 
         private int hasNewFrame;
 
@@ -77,6 +78,7 @@ namespace StreamVideo
             encoding = msg.encoding;
             stampSeconds = msg.header?.stamp?.sec ?? 0;
             stampNanoseconds = msg.header?.stamp?.nanosec ?? 0;
+            receiveUnixSeconds = ROS2.ROS2InfoManager.GetCurrentUnixSeconds();
 
             var tmp = writeBuffer;
             writeBuffer = readBuffer;
@@ -112,7 +114,8 @@ namespace StreamVideo
             }
 
             texture.Apply(false, false);
-            ros2InfoManager?.RecordTopicDisplayLatencyFromHeader(topicName, stampSeconds, stampNanoseconds);
+            ros2InfoManager?.RecordTopicDisplayLatency(topicName, stampSeconds, stampNanoseconds, receiveUnixSeconds);
+            ros2InfoManager?.RecordTopicDisplayedFrame(topicName);
         }
 
         public void ResetROS2Subscriber()
