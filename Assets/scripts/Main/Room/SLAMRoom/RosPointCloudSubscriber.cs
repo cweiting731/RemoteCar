@@ -50,6 +50,8 @@ namespace Main.Room.SLAMRoom
 		public int icpTargetSampleCount = 2500;
 		[Tooltip("0 disables rejection. Use a larger value when the initial offset is big.")]
 		public float icpMaxCorrespondenceDistance = 0f;
+		public bool icpApplyPosition = true;
+		public bool icpApplyRotation = true;
 		public bool icpAllowScale = true;
 		public bool icpClampScale = true;
 		public Vector2 icpScaleClamp = new Vector2(0.25f, 4f);
@@ -748,6 +750,8 @@ namespace Main.Room.SLAMRoom
 		{
 			try
 			{
+				UpdateIcpRuntimeInfo("Preparing", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, "");
+
 				if (particleSystemInstance == null)
 				{
 					SetupParticleSystem();
@@ -757,6 +761,7 @@ namespace Main.Room.SLAMRoom
 				if (targetRoot == null)
 				{
 					Debug.LogWarning($"[ROS2 PointCloud ICP] Target root '{icpTargetRootName}' was not found.");
+					UpdateIcpRuntimeInfo("Failed: target not found", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, icpTargetRootName);
 					return false;
 				}
 
@@ -764,18 +769,21 @@ namespace Main.Room.SLAMRoom
 				if (alignRoot == null)
 				{
 					Debug.LogWarning("[ROS2 PointCloud ICP] No transform root available to move.");
+					UpdateIcpRuntimeInfo("Failed: transform root missing", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, targetRoot.name);
 					return false;
 				}
 
 				if (!CollectPointCloudWorldSamples(icpSourceWorldPoints, icpSourceSampleCount))
 				{
 					Debug.LogWarning("[ROS2 PointCloud ICP] No point cloud samples available. Wait for a cloud frame first.");
+					UpdateIcpRuntimeInfo("Failed: no point cloud samples", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, targetRoot.name);
 					return false;
 				}
 
 				if (!CollectTargetMeshWorldSamples(targetRoot, icpTargetWorldPoints, icpTargetSampleCount))
 				{
 					Debug.LogWarning($"[ROS2 PointCloud ICP] No mesh samples found under '{targetRoot.name}'.");
+					UpdateIcpRuntimeInfo("Failed: no target mesh samples", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, targetRoot.name);
 					return false;
 				}
 
@@ -798,6 +806,7 @@ namespace Main.Room.SLAMRoom
 					if (icpMatchedSourcePoints.Count < 6)
 					{
 						Debug.LogWarning($"[ROS2 PointCloud ICP] Too few matches ({icpMatchedSourcePoints.Count}). Try increasing icpMaxCorrespondenceDistance.");
+						UpdateIcpRuntimeInfo("Failed: too few matches", i + 1, Mathf.Max(1, icpIterations), icpMatchedSourcePoints.Count, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 						return false;
 					}
 
@@ -810,6 +819,7 @@ namespace Main.Room.SLAMRoom
 						out finalRmse))
 					{
 						Debug.LogWarning("[ROS2 PointCloud ICP] Failed to compute transform.");
+						UpdateIcpRuntimeInfo("Failed: transform solve error", i + 1, Mathf.Max(1, icpIterations), icpMatchedSourcePoints.Count, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 						return false;
 					}
 
@@ -822,9 +832,11 @@ namespace Main.Room.SLAMRoom
 					cumulativeTranslation = stepRotation * (cumulativeTranslation * stepScale) + stepTranslation;
 					cumulativeRotation = stepRotation * cumulativeRotation;
 					cumulativeScale *= stepScale;
+					UpdateIcpRuntimeInfo("Running", i + 1, Mathf.Max(1, icpIterations), finalMatchCount, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 				}
 
 				ApplyIcpTransform(alignRoot, cumulativeRotation, cumulativeScale, cumulativeTranslation);
+				UpdateIcpRuntimeInfo("Completed", Mathf.Max(1, icpIterations), Mathf.Max(1, icpIterations), finalMatchCount, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 
 				if (enableDebugLog)
 				{
@@ -836,6 +848,7 @@ namespace Main.Room.SLAMRoom
 			catch (Exception ex)
 			{
 				Debug.LogError($"[ROS2 PointCloud ICP] Align failed: {ex.Message}");
+				UpdateIcpRuntimeInfo($"Failed: {ex.Message}", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, "");
 				return false;
 			}
 		}
@@ -846,6 +859,8 @@ namespace Main.Room.SLAMRoom
 
 			try
 			{
+				UpdateIcpRuntimeInfo("Preparing", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, "");
+
 				if (particleSystemInstance == null)
 				{
 					SetupParticleSystem();
@@ -855,6 +870,7 @@ namespace Main.Room.SLAMRoom
 				if (targetRoot == null)
 				{
 					Debug.LogWarning($"[ROS2 PointCloud ICP] Target root '{icpTargetRootName}' was not found.");
+					UpdateIcpRuntimeInfo("Failed: target not found", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, icpTargetRootName);
 					yield break;
 				}
 
@@ -862,18 +878,21 @@ namespace Main.Room.SLAMRoom
 				if (alignRoot == null)
 				{
 					Debug.LogWarning("[ROS2 PointCloud ICP] No transform root available to move.");
+					UpdateIcpRuntimeInfo("Failed: transform root missing", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, targetRoot.name);
 					yield break;
 				}
 
 				if (!CollectPointCloudWorldSamples(icpSourceWorldPoints, icpSourceSampleCount))
 				{
 					Debug.LogWarning("[ROS2 PointCloud ICP] No point cloud samples available. Wait for a cloud frame first.");
+					UpdateIcpRuntimeInfo("Failed: no point cloud samples", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, targetRoot.name);
 					yield break;
 				}
 
 				if (!CollectTargetMeshWorldSamples(targetRoot, icpTargetWorldPoints, icpTargetSampleCount))
 				{
 					Debug.LogWarning($"[ROS2 PointCloud ICP] No mesh samples found under '{targetRoot.name}'.");
+					UpdateIcpRuntimeInfo("Failed: no target mesh samples", 0, Mathf.Max(1, icpIterations), 0, -1f, 1f, Quaternion.identity, targetRoot.name);
 					yield break;
 				}
 
@@ -896,6 +915,7 @@ namespace Main.Room.SLAMRoom
 					if (icpMatchedSourcePoints.Count < 6)
 					{
 						Debug.LogWarning($"[ROS2 PointCloud ICP] Too few matches ({icpMatchedSourcePoints.Count}). Try increasing icpMaxCorrespondenceDistance.");
+						UpdateIcpRuntimeInfo("Failed: too few matches", i + 1, Mathf.Max(1, icpIterations), icpMatchedSourcePoints.Count, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 						yield break;
 					}
 
@@ -908,6 +928,7 @@ namespace Main.Room.SLAMRoom
 						out finalRmse))
 					{
 						Debug.LogWarning("[ROS2 PointCloud ICP] Failed to compute transform.");
+						UpdateIcpRuntimeInfo("Failed: transform solve error", i + 1, Mathf.Max(1, icpIterations), icpMatchedSourcePoints.Count, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 						yield break;
 					}
 
@@ -920,10 +941,12 @@ namespace Main.Room.SLAMRoom
 					cumulativeTranslation = stepRotation * (cumulativeTranslation * stepScale) + stepTranslation;
 					cumulativeRotation = stepRotation * cumulativeRotation;
 					cumulativeScale *= stepScale;
+					UpdateIcpRuntimeInfo("Running", i + 1, Mathf.Max(1, icpIterations), finalMatchCount, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 					yield return null;
 				}
 
 				ApplyIcpTransform(alignRoot, cumulativeRotation, cumulativeScale, cumulativeTranslation);
+				UpdateIcpRuntimeInfo("Completed", Mathf.Max(1, icpIterations), Mathf.Max(1, icpIterations), finalMatchCount, finalRmse, cumulativeScale, cumulativeRotation, targetRoot.name);
 
 				if (enableDebugLog)
 				{
@@ -1238,8 +1261,6 @@ namespace Main.Room.SLAMRoom
 		private void ApplyIcpTransform(Transform alignRoot, Quaternion rotation, float scaleDelta, Vector3 translation)
 		{
 			Vector3 oldPosition = alignRoot.position;
-			alignRoot.position = rotation * (oldPosition * scaleDelta) + translation;
-			alignRoot.rotation = rotation * alignRoot.rotation;
 
 			if (icpAllowScale)
 			{
@@ -1257,11 +1278,73 @@ namespace Main.Room.SLAMRoom
 					ApplyRoomScale();
 				}
 			}
+
+			if (icpApplyRotation)
+			{
+				alignRoot.rotation = rotation * alignRoot.rotation;
+			}
+
+			if (icpApplyPosition)
+			{
+				float appliedScale = icpAllowScale ? scaleDelta : 1f;
+				alignRoot.position = rotation * (oldPosition * appliedScale) + translation;
+			}
 		}
 
 		private float AverageAbsScale(Vector3 scale)
 		{
 			return (Mathf.Abs(scale.x) + Mathf.Abs(scale.y) + Mathf.Abs(scale.z)) / 3f;
+		}
+
+		private void UpdateIcpRuntimeInfo(
+			string status,
+			int iteration,
+			int totalIterations,
+			int matches,
+			float rmse,
+			float scaleDelta,
+			Quaternion yawDelta,
+			string targetName)
+		{
+			if (ros2InfoManager == null)
+			{
+				return;
+			}
+
+			string statusColor = "white";
+			if (!string.IsNullOrEmpty(status))
+			{
+				if (status.StartsWith("Running", StringComparison.OrdinalIgnoreCase) ||
+					status.StartsWith("Preparing", StringComparison.OrdinalIgnoreCase))
+				{
+					statusColor = "yellow";
+				}
+				else if (status.StartsWith("Completed", StringComparison.OrdinalIgnoreCase))
+				{
+					statusColor = "green";
+				}
+				else if (status.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))
+				{
+					statusColor = "red";
+				}
+			}
+
+			string rmseText = rmse >= 0f ? $"{rmse:0.0000}" : "--";
+			string targetText = string.IsNullOrEmpty(targetName) ? "--" : targetName;
+			float yawDegrees = Mathf.DeltaAngle(0f, yawDelta.eulerAngles.y);
+			string info =
+				$"ICP {topicName}: <color={statusColor}>{status}</color>\n" +
+				$"  Iter: {iteration}/{Mathf.Max(1, totalIterations)}  Matches: {matches}\n" +
+				$"  RMSE: {rmseText}  ScaleΔ: {scaleDelta:0.####}  YawΔ: {yawDegrees:0.##}°\n" +
+				$"  Samples: {icpSourceWorldPoints.Count}/{icpTargetWorldPoints.Count}  Target: {targetText}";
+
+			ros2InfoManager.SetRuntimeInfo(GetIcpRuntimeInfoKey(), info);
+			ros2InfoManager.UpdateInfo();
+		}
+
+		private string GetIcpRuntimeInfoKey()
+		{
+			return $"{topicName}:ICP";
 		}
 
 		private bool IsFinite(Vector3 value)

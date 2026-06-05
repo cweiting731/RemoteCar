@@ -57,6 +57,7 @@ namespace ROS2
         private readonly object throughputLock = new object();
         private readonly Dictionary<string, long> throughputBytesByTopic = new Dictionary<string, long>();
         private readonly Dictionary<string, int> displayedFramesByTopic = new Dictionary<string, int>();
+        private readonly Dictionary<string, string> runtimeInfoByKey = new Dictionary<string, string>();
         private ROSConnection ros;
         private float infoTimer = 0f;
         private const double MinimumPlausibleUnixSeconds = 946684800.0; // 2000-01-01 UTC
@@ -113,6 +114,17 @@ namespace ROS2
                 }
             }
 
+            if (runtimeInfoByKey.Count > 0)
+            {
+                foreach (var item in runtimeInfoByKey)
+                {
+                    if (!string.IsNullOrEmpty(item.Value))
+                    {
+                        info += $"{item.Value}\n";
+                    }
+                }
+            }
+
             if (infoText != null)
             {
                 infoText.text = info;
@@ -121,6 +133,32 @@ namespace ROS2
             {
                 Debug.LogWarning("[ROS2InfoManager] Info TextMeshProUGUI is not assigned.");
             }
+        }
+
+        public void SetRuntimeInfo(string key, string info)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(info))
+            {
+                runtimeInfoByKey.Remove(key);
+                return;
+            }
+
+            runtimeInfoByKey[key] = info;
+        }
+
+        public void ClearRuntimeInfo(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+            {
+                return;
+            }
+
+            runtimeInfoByKey.Remove(key);
         }
 
         public void SetTopicMbps(string topicName, float mbps)

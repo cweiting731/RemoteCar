@@ -51,7 +51,7 @@ namespace Main.Room.SLAMRoom
 
 		[Header("Pose Loss")]
 		[Tooltip("If no pose is received for this many seconds, clear the old path and restart on the next pose. Set to 0 or less to disable.")]
-		public float poseLostTimeoutSeconds = 1.0f;
+		public float poseLostTimeoutSeconds = 20.0f;
 
 		[Header("Debug")]
 		public bool enableDebugLog = true;
